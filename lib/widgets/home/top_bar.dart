@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../screens/calendar_screen.dart';
+import 'package:red/screens/settings/settings_screen.dart'; // 👈 ADD THIS
 
 class TopBar extends StatelessWidget {
   final DateTime today;
@@ -27,15 +28,28 @@ class TopBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        CircleAvatar(
-          radius: 20,
-          backgroundColor: const Color(0xFFF5F5F5),
-          child: const Icon(
-            Icons.person,
-            size: 20,
-            color: Color(0xFF9E9E9E),
+        // 👇 MAKE PROFILE ICON CLICKABLE
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SettingsScreen(),
+              ),
+            );
+          },
+          child: CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFFF5F5F5),
+            child: const Icon(
+              Icons.person,
+              size: 20,
+              color: Color(0xFF9E9E9E),
+            ),
           ),
         ),
+
+        // 📅 Date
         Text(
           formattedDate,
           style: theme.textTheme.titleMedium?.copyWith(
@@ -44,6 +58,8 @@ class TopBar extends StatelessWidget {
             letterSpacing: 0.3,
           ),
         ),
+
+        // 📆 Calendar Button (unchanged)
         IconButton(
           onPressed: () {
             Navigator.push(
