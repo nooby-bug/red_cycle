@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../utils/user_preferences.dart';
 
 class ProfileDetailsScreen extends StatefulWidget {
   const ProfileDetailsScreen({super.key});
@@ -9,13 +10,33 @@ class ProfileDetailsScreen extends StatefulWidget {
 }
 
 class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
-  // Local state (No persistence yet)
-  String _name = 'User';
+  // Local state variables
+  String _name = "User";
   DateTime? _birthdate;
 
-  // --- INTERACTION: Edit Name ---
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  // --- LOAD DATA ---
+  Future<void> _loadData() async {
+    final name = await UserPreferences.getName();
+    final birthdate = await UserPreferences.getBirthdate();
+
+    if (!mounted) return;
+
+    setState(() {
+      _name = name ?? "User";
+      _birthdate = birthdate;
+    });
+  }
+
+  // --- SAVE & EDIT NAME ---
   Future<void> _editName() async {
-    final TextEditingController controller = TextEditingController(text: _name);
+    final initialText = _name == "User" ? "" : _name;
+    final TextEditingController controller = TextEditingController(text: initialText);
 
     final newName = await showDialog<String>(
       context: context,
@@ -28,10 +49,10 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
             controller: controller,
             textCapitalization: TextCapitalization.words,
             autofocus: true,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               hintText: 'Enter your name',
               focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: const Color(0xFFF06292), width: 2),
+                borderSide: BorderSide(color: Color(0xFFF06292), width: 2),
               ),
             ),
           ),
@@ -58,13 +79,19 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     );
 
     if (newName != null && newName != _name) {
+      // Save persistently
+      await UserPreferences.saveName(newName);
+
+      if (!mounted) return;
+
+      // Update UI
       setState(() {
         _name = newName;
       });
     }
   }
 
-  // --- INTERACTION: Edit Birthdate ---
+  // --- SAVE & EDIT BIRTHDATE ---
   Future<void> _editBirthdate() async {
     final now = DateTime.now();
     final initialDate = _birthdate ?? DateTime(now.year - 25);
@@ -89,6 +116,12 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     );
 
     if (pickedDate != null && pickedDate != _birthdate) {
+      // Save persistently
+      await UserPreferences.saveBirthdate(pickedDate);
+
+      if (!mounted) return;
+
+      // Update UI
       setState(() {
         _birthdate = pickedDate;
       });
@@ -108,7 +141,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow:[
           BoxShadow(
-            color: const Color(0xFFFFB6C1).withOpacity(0.15),
+            color: const Color(0xFFFFB6C1).withValues(alpha: 0.15),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -160,7 +193,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF5F6), // Match settings background
+      backgroundColor: const Color(0xFFFFF5F6),
       appBar: AppBar(
         title: const Text(
           'Profile',
@@ -168,7 +201,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87), // Dark back arrow
+        iconTheme: const IconThemeData(color: Colors.black87),
         centerTitle: true,
       ),
       body: SafeArea(
