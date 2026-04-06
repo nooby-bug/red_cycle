@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:red/screens/settings/profile_details_screen.dart';
+import 'package:red/screens/settings/cycle_settings_screen.dart'; // Adjust path if needed
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -75,10 +76,19 @@ class SettingsScreen extends StatelessWidget {
                     ),
 
                     // 2. Cycle Section
+
                     SettingsTile(
                       icon: Icons.water_drop_outlined,
                       title: 'Cycle',
-                      onTap: () => debugPrint('Cycle clicked'),
+                      onTap: () {
+                        // Navigate to the new CycleSettingsScreen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CycleSettingsScreen(),
+                          ),
+                        );
+                      },
                     ),
 
                     // 3. Reminders Section

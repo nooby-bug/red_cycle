@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../screens/calendar_screen.dart';
-import 'package:red/screens/settings/settings_screen.dart'; // 👈 ADD THIS
+import 'package:red/screens/settings/settings_screen.dart';
 
 class TopBar extends StatelessWidget {
   final DateTime today;
+  final VoidCallback onReturn; // ✅ STEP 3 ADDED
 
   const TopBar({
     super.key,
     required this.today,
+    required this.onReturn, // ✅ STEP 3 ADDED
   });
 
   String _monthName(int month) {
@@ -28,15 +30,18 @@ class TopBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // 👇 MAKE PROFILE ICON CLICKABLE
+        // 👇 PROFILE ICON (opens settings)
         GestureDetector(
-          onTap: () {
-            Navigator.push(
+          onTap: () async { // ✅ STEP 4 (async added)
+            await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const SettingsScreen(),
               ),
             );
+
+            // 🔥 Notify HomeScreen
+            onReturn(); // ✅ STEP 4 ADDED
           },
           child: CircleAvatar(
             radius: 20,
@@ -59,7 +64,7 @@ class TopBar extends StatelessWidget {
           ),
         ),
 
-        // 📆 Calendar Button (unchanged)
+        // 📆 Calendar Button
         IconButton(
           onPressed: () {
             Navigator.push(
