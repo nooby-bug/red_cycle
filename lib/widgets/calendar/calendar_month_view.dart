@@ -7,21 +7,67 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../services/calendar_service.dart';
-import 'package:red/models/period_entry.dart'; // ✅ ADDED
+import '../../utils/user_preferences.dart';
+import '../../database/database_helper.dart';
+import 'package:red/models/period_entry.dart';
 
-class CalendarMonthView extends StatelessWidget {
+class CalendarMonthView extends StatefulWidget {
   final DateTime month;
-  final List<PeriodEntry> periods; // ✅ UPDATED
+
+  const CalendarMonthView({
+    super.key,
+    required this.month,
+  });
+
+  @override
+  State<CalendarMonthView> createState() => _CalendarMonthViewState();
+}
+
+class _CalendarMonthViewState extends State<CalendarMonthView> {
+  // ------------------ STATE ------------------
+
+  int _cycleLength = 28;
+  int _periodLength = 5;
+  List<PeriodEntry> _periods = [];
+
+  final CalendarService _calendarService = CalendarService();
 
   static final _monthFormat = DateFormat.yMMMM();
 
-  final _calendarService = CalendarService();
+  // ------------------ INIT ------------------
 
-  CalendarMonthView({
-    super.key,
-    required this.month,
-    required this.periods, // ✅ UPDATED
-  });
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+    _loadPeriods();
+  }
+
+  // ------------------ DATA LOADING ------------------
+
+  Future<void> _loadSettings() async {
+    final cycle = await UserPreferences.getCycleLength();
+    final period = await UserPreferences.getPeriodLength();
+
+    if (!mounted) return;
+
+    setState(() {
+      _cycleLength = cycle ?? 28;
+      _periodLength = period ?? 5;
+    });
+  }
+
+  Future<void> _loadPeriods() async {
+    final periods = await DatabaseHelper.instance.getAllPeriods();
+
+    if (!mounted) return;
+
+    setState(() {
+    _periods = periods..sort((a, b) => b.startDate.compareTo(a.startDate));
+    });
+  }
+
+  // ------------------ BUILD ------------------
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +82,7 @@ class CalendarMonthView extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            _monthFormat.format(month),
+            _monthFormat.format(widget.month),
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
               color: const Color(0xFF333333),
@@ -52,15 +98,21 @@ class CalendarMonthView extends StatelessWidget {
           child: TableCalendar(
             firstDay: DateTime.utc(2000, 1, 1),
             lastDay: DateTime.utc(2100, 12, 31),
-            focusedDay: month,
+            focusedDay: widget.month,
             rowHeight: 48,
             daysOfWeekHeight: 24,
 
             daysOfWeekStyle: const DaysOfWeekStyle(
               weekdayStyle: TextStyle(
-                  fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600),
+                fontSize: 12,
+                color: Colors.black54,
+                fontWeight: FontWeight.w600,
+              ),
               weekendStyle: TextStyle(
-                  fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600),
+                fontSize: 12,
+                color: Colors.black54,
+                fontWeight: FontWeight.w600,
+              ),
             ),
 
             calendarStyle: const CalendarStyle(
@@ -77,8 +129,10 @@ class CalendarMonthView extends StatelessWidget {
             },
 
             calendarBuilders: CalendarBuilders(
-              defaultBuilder: (context, day, focusedDay) => _buildDayCell(day),
-              todayBuilder: (context, day, focusedDay) => _buildDayCell(day),
+              defaultBuilder: (context, day, focusedDay) =>
+                  _buildDayCell(context, day),
+              todayBuilder: (context, day, focusedDay) =>
+                  _buildDayCell(context, day),
             ),
           ),
         ),
@@ -88,16 +142,14 @@ class CalendarMonthView extends StatelessWidget {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // INTERACTION LOGIC
-  // ---------------------------------------------------------------------------
+  // ------------------ INTERACTION ------------------
 
   void _showDayDetails(BuildContext context, DateTime day) {
     final type = _calendarService.getDayType(
       day: day,
-      periods: periods, // ✅ FIXED
-      cycleLength: 28,
-      periodLength: 5,
+      periods: _periods,
+      cycleLength: _cycleLength,
+      periodLength: _periodLength,
     );
 
     String phaseText;
@@ -120,9 +172,8 @@ class CalendarMonthView extends StatelessWidget {
 
     int? cycleDay;
 
-    if (periods.isNotEmpty) {
-      // ✅ FIXED latest start logic
-      final latestStart = periods
+    if (_periods.isNotEmpty) {
+      final latestStart = _periods
           .map((e) => e.startDate)
           .reduce((a, b) => a.isAfter(b) ? a : b);
 
@@ -138,7 +189,8 @@ class CalendarMonthView extends StatelessWidget {
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return SafeArea(
           child: Padding(
@@ -192,16 +244,14 @@ class CalendarMonthView extends StatelessWidget {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // BUILDERS & UI HELPERS
-  // ---------------------------------------------------------------------------
+  // ------------------ UI BUILDERS ------------------
 
-  Widget _buildDayCell(DateTime day) {
+  Widget _buildDayCell(BuildContext context, DateTime day) {
     final type = _calendarService.getDayType(
       day: day,
-      periods: periods, // ✅ FIXED
-      cycleLength: 28,
-      periodLength: 5,
+      periods: _periods,
+      cycleLength: _cycleLength,
+      periodLength: _periodLength,
     );
 
     final isToday = isSameDay(day, DateTime.now());
@@ -209,18 +259,33 @@ class CalendarMonthView extends StatelessWidget {
     const pink = Color(0xFFF48FB1);
     const blue = Color(0xFFB3D9FF);
 
+    Widget child;
+
     switch (type) {
       case DayType.actualPeriod:
-        return _filledCircle(day, pink, isToday: isToday);
+        child = _filledCircle(day, pink, isToday: isToday);
+        break;
       case DayType.predictedPeriod:
-        return _dottedCircle(day, pink, isToday: isToday);
+        child = _dottedCircle(day, pink, isToday: isToday);
+        break;
       case DayType.ovulation:
-        return _filledCircle(day, blue, isToday: isToday);
+        child = _filledCircle(day, blue, isToday: isToday);
+        break;
       case DayType.fertile:
-        return _dottedCircle(day, blue, isToday: isToday);
+        child = _dottedCircle(day, blue, isToday: isToday);
+        break;
       default:
-        return isToday ? _todayOnly(day) : _normalDay(day);
+        child = isToday ? _todayOnly(day) : _normalDay(day);
     }
+
+    return GestureDetector(
+      onTap: () => _showDayDetails(context, day),
+      child: AnimatedScale(
+        scale: isToday ? 1.05 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: child,
+      ),
+    );
   }
 
   Widget _filledCircle(DateTime day, Color color, {bool isToday = false}) {
@@ -237,8 +302,8 @@ class CalendarMonthView extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(
           '${day.day}',
-          style:
-          const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
     );
@@ -254,9 +319,9 @@ class CalendarMonthView extends StatelessWidget {
           alignment: Alignment.center,
           decoration: isToday
               ? BoxDecoration(
-              shape: BoxShape.circle,
-              border:
-              Border.all(color: Colors.grey.shade400, width: 1.5))
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.grey.shade400, width: 1.5),
+          )
               : null,
           child: Text(
             '${day.day}',
@@ -273,8 +338,10 @@ class CalendarMonthView extends StatelessWidget {
       width: 36,
       height: 36,
       child: Container(
-        decoration:
-        BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade300),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.grey.shade300,
+        ),
         alignment: Alignment.center,
         child: Text(
           '${day.day}',
@@ -290,16 +357,16 @@ class CalendarMonthView extends StatelessWidget {
       width: 36,
       height: 36,
       child: Center(
-        child: Text('${day.day}',
-            style: const TextStyle(color: Colors.black87)),
+        child: Text(
+          '${day.day}',
+          style: const TextStyle(color: Colors.black87),
+        ),
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// CUSTOM PAINTER
-// ---------------------------------------------------------------------------
+// ------------------ CUSTOM PAINTER ------------------
 
 class DottedCirclePainter extends CustomPainter {
   final Color color;

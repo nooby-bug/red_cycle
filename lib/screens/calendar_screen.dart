@@ -118,8 +118,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   return RepaintBoundary(
                     child: CalendarMonthView(
                       month: _months[index],
-                      periods: _periods, // 🔴 FIX 3: Pass full data
-                    ),
+                    )
                   );
                 },
               ),

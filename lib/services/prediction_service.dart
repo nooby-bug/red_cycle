@@ -1,3 +1,28 @@
+/// ---------------------------------------------------------------------------
+/// TODO: SMART CYCLE PREDICTION (FUTURE IMPROVEMENT)
+///
+/// Currently:
+/// - App uses user-defined cycleLength & periodLength (manual input)
+///
+/// Future upgrade:
+/// - Calculate average cycle length from past PeriodEntry data
+/// - Use historical cycles to improve prediction accuracy
+///
+/// Example:
+/// - Cycle lengths: 28, 30, 27 → avg ≈ 28.3
+///
+/// Planned improvements:
+/// - calculateAverageCycleLength(List<PeriodEntry>)
+/// - handle irregular cycles
+/// - weighted averaging (recent cycles more important)
+/// - confidence scoring for predictions
+///
+/// NOTE:
+/// Do NOT implement until base system is fully stable.
+/// ---------------------------------------------------------------------------
+
+
+
 import '../models/hero_state.dart';
 import '../models/period_entry.dart';
 
