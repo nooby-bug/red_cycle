@@ -1,27 +1,25 @@
-/// ---------------------------------------------------------------------------
-/// TODO: SMART CYCLE PREDICTION (FUTURE IMPROVEMENT)
-///
-/// Currently:
-/// - App uses user-defined cycleLength & periodLength (manual input)
-///
-/// Future upgrade:
-/// - Calculate average cycle length from past PeriodEntry data
-/// - Use historical cycles to improve prediction accuracy
-///
-/// Example:
-/// - Cycle lengths: 28, 30, 27 → avg ≈ 28.3
-///
-/// Planned improvements:
-/// - calculateAverageCycleLength(List<PeriodEntry>)
-/// - handle irregular cycles
-/// - weighted averaging (recent cycles more important)
-/// - confidence scoring for predictions
-///
-/// NOTE:
-/// Do NOT implement until base system is fully stable.
-/// ---------------------------------------------------------------------------
-
-
+// ---------------------------------------------------------------------------
+// TODO: SMART CYCLE PREDICTION (FUTURE IMPROVEMENT)
+//
+// Currently:
+// - App uses user-defined cycleLength & periodLength (manual input)
+//
+// Future upgrade:
+// - Calculate average cycle length from past PeriodEntry data
+// - Use historical cycles to improve prediction accuracy
+//
+// Example:
+// - Cycle lengths: 28, 30, 27 → avg ≈ 28.3
+//
+// Planned improvements:
+// - `calculateAverageCycleLength(List<PeriodEntry>)`
+// - handle irregular cycles
+// - weighted averaging (recent cycles more important)
+// - confidence scoring for predictions
+//
+// NOTE:
+// Do NOT implement until base system is fully stable.
+// ---------------------------------------------------------------------------
 
 import '../models/hero_state.dart';
 import '../models/period_entry.dart';
@@ -42,18 +40,27 @@ class PredictionService {
       );
     }
 
-    final DateTime normalizedToday =
-    DateTime(today.year, today.month, today.day);
+    final DateTime normalizedToday = _normalize(today);
 
     final List<PeriodEntry> sortedEntries = List.from(periodEntries)
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
 
     final PeriodEntry latestEntry = sortedEntries.first;
 
-    final DateTime latestStart = DateTime(
-        latestEntry.startDate.year,
-        latestEntry.startDate.month,
-        latestEntry.startDate.day);
+    final DateTime latestStart = _normalize(latestEntry.startDate);
+
+    // ------------------------------------------------------------
+    // SMART CYCLE LENGTH (AUTO / FALLBACK)
+    // ------------------------------------------------------------
+    int effectiveCycleLength = cycleLength;
+
+    if (periodEntries.length >= 3) {
+      final avg = calculateAverageCycleLength(periodEntries);
+
+      if (avg > 10) {
+        effectiveCycleLength = avg.round();
+      }
+    }
 
     final int cycleDay =
         normalizedToday.difference(latestStart).inDays + 1;
@@ -74,10 +81,7 @@ class PredictionService {
       );
     }
 
-    final DateTime latestEnd = DateTime(
-        latestEntry.endDate!.year,
-        latestEntry.endDate!.month,
-        latestEntry.endDate!.day);
+    final DateTime latestEnd = _normalize(latestEntry.endDate!);
 
     // ------------------------------------------------------------------
     // ✅ COMPLETED PERIOD (STRICT RANGE CHECK)
@@ -100,7 +104,7 @@ class PredictionService {
     // ------------------------------------------------------------------
 
     final DateTime nextPeriodDate =
-    latestStart.add(Duration(days: cycleLength));
+    latestStart.add(Duration(days: effectiveCycleLength));
 
     // ✅ Late only AFTER expected date
     if (normalizedToday.isAfter(nextPeriodDate)) {
@@ -118,7 +122,7 @@ class PredictionService {
     final int daysRemaining =
         nextPeriodDate.difference(normalizedToday).inDays;
 
-    final int ovulationDay = cycleLength - 14;
+    final int ovulationDay = effectiveCycleLength - 14;
 
     // ✅ FIXED fertile window
     final int fertileStart = ovulationDay - 3;
@@ -140,5 +144,41 @@ class PredictionService {
       infoText: "Next period in $daysRemaining days",
       showLogButton: true,
     );
+  }
+
+  // --------------------------------------------------------------------------
+  // UTILITIES
+  // --------------------------------------------------------------------------
+
+  /// Strips the time from a DateTime to ensure flawless day-to-day comparisons.
+  DateTime _normalize(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  /// Calculates average cycle length using historical period data
+  double calculateAverageCycleLength(List<PeriodEntry> periods) {
+    if (periods.length < 2) {
+      return 0.0;
+    }
+
+    final sortedPeriods = List<PeriodEntry>.from(periods)
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    final List<int> cycleLengths = [];
+
+    for (int i = 0; i < sortedPeriods.length - 1; i++) {
+      final DateTime day1 = _normalize(sortedPeriods[i].startDate);
+      final DateTime day2 = _normalize(sortedPeriods[i + 1].startDate);
+
+      final int length = day2.difference(day1).inDays;
+      cycleLengths.add(length);
+    }
+
+    if (cycleLengths.isEmpty) {
+      return 0.0;
+    }
+
+    final int sum = cycleLengths.reduce((a, b) => a + b);
+    return sum / cycleLengths.length;
   }
 }
