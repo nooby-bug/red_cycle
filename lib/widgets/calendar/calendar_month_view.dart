@@ -128,6 +128,10 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
               _showDayDetails(context, selectedDay);
             },
 
+            onDayLongPressed: (selectedDay, focusedDay) {
+              _showAddPeriodSheet(context, selectedDay);
+            },
+
             calendarBuilders: CalendarBuilders(
               defaultBuilder: (context, day, focusedDay) =>
                   _buildDayCell(context, day),
@@ -225,6 +229,217 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                 const SizedBox(height: 24),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAddPeriodSheet(
+      BuildContext context,
+      DateTime selectedDay, {
+        bool isEdit = false,
+        PeriodEntry? editingEntry,
+      }) {
+    PeriodEntry? existing;
+
+    for (final entry in _periods) {
+      final start = entry.startDate;
+      final end = entry.endDate ?? start;
+
+      if (!selectedDay.isBefore(start) && !selectedDay.isAfter(end)) {
+        existing = entry;
+        break;
+      }
+    }
+
+    if (!isEdit && existing != null) {
+      _showEditOptions(context, existing);
+      return;
+    }
+
+    DateTime startDate;
+    DateTime endDate;
+
+    if (isEdit && editingEntry != null) {
+      startDate = editingEntry.startDate;
+      endDate = editingEntry.endDate ?? editingEntry.startDate;
+    } else {
+      startDate = selectedDay;
+      endDate = selectedDay.add(const Duration(days: 4));
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Log Period",
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Start Date
+                  ListTile(
+                    title: const Text("Start Date"),
+                    trailing: Text(DateFormat.yMMMd().format(startDate)),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: startDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+
+                      if (picked != null) {
+                        setModalState(() {
+                          startDate = picked;
+                        });
+                      }
+                    },
+                  ),
+
+                  // End Date
+                  ListTile(
+                    title: const Text("End Date"),
+                    trailing: Text(DateFormat.yMMMd().format(endDate)),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: endDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+
+                      if (picked != null) {
+                        setModalState(() {
+                          endDate = picked;
+                        });
+                      }
+                    },
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Button (no logic yet)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        DateTime newStart = startDate;
+                        DateTime newEnd = endDate;
+
+                        List<PeriodEntry> toRemove = [];
+
+                        // 🔍 Find overlapping periods
+                        for (final entry in _periods) {
+                          final existingStart = entry.startDate;
+                          final existingEnd = entry.endDate ?? existingStart;
+
+                          final overlaps =
+                          !(newEnd.isBefore(existingStart) || newStart.isAfter(existingEnd));
+
+                          if (overlaps) {
+                            // 🧠 Merge logic
+                            if (existingStart.isBefore(newStart)) {
+                              newStart = existingStart;
+                            }
+                            if (existingEnd.isAfter(newEnd)) {
+                              newEnd = existingEnd;
+                            }
+
+                            toRemove.add(entry);
+                          }
+                        }
+
+                        // 🗑️ Remove overlapping entries
+                        for (final entry in toRemove) {
+                          if (entry.id != null) {
+                            await DatabaseHelper.instance.deletePeriod(entry.id!);
+                          }
+                        }
+
+                        // ➕ Insert merged period
+                        final id = await DatabaseHelper.instance.insertPeriod(newStart);
+                        await DatabaseHelper.instance.endPeriod(id, newEnd);
+
+                        // 🔄 Refresh
+                        await _loadPeriods();
+
+                        Navigator.pop(context);
+                      },
+                      child: const Text("Save Period"),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditOptions(BuildContext context, PeriodEntry entry) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isDismissible: true, // tap outside closes
+      enableDrag: true,    // swipe down closes
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // EDIT
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text("Edit Period"),
+                onTap: () {
+                  Navigator.pop(context);
+
+                  // open existing editor
+                  _showAddPeriodSheet(
+                    context,
+                    entry.startDate,
+                    isEdit: true,
+                    editingEntry: entry,
+                  );               },
+              ),
+
+              // DELETE
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text("Delete Period"),
+                onTap: () async {
+                  if (entry.id != null) {
+                    await DatabaseHelper.instance.deletePeriod(entry.id!);
+                    await _loadPeriods();
+                  }
+
+                  Navigator.pop(context);
+                },
+              ),
+            ],
           ),
         );
       },

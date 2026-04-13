@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _handleReturnFromSettings() {
     _loadSettings();
+    _loadPeriods(); // ✅ FIX: refresh data when returning
   }
 
   @override
@@ -49,6 +50,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() {
         _today = DateTime.now();
       });
+
+      _loadPeriods(); // ✅ FIX: refresh when app resumes
     }
   }
 
@@ -72,6 +75,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final cycle = await UserPreferences.getCycleLength();
     final period = await UserPreferences.getPeriodLength();
 
+    if (!mounted) return;
+
     setState(() {
       _cycleLength = cycle ?? 28;
       _periodLength = period ?? 5;
@@ -81,13 +86,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _loadPeriods() async {
     final data = await DatabaseHelper.instance.getAllPeriods();
 
-    if (mounted) {
-      setState(() {
-        _periodEntries =
-        data..sort((a, b) => b.startDate.compareTo(a.startDate));
-        _isLoading = false;
-      });
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _periodEntries =
+      data..sort((a, b) => b.startDate.compareTo(a.startDate));
+      _isLoading = false;
+    });
   }
 
   Future<void> _handleLogPeriod() async {
@@ -121,13 +126,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return const Scaffold(
         backgroundColor: Color(0xFFFAFAFA),
         body: Center(
-          child:
-          CircularProgressIndicator(color: Color(0xFFF48FB1)),
+          child: CircularProgressIndicator(color: Color(0xFFF48FB1)),
         ),
       );
     }
 
-    // ✅ Prediction calculations
     String nextPeriodStr = "--";
     String ovulationStr = "--";
     String fertileStr = "--";
@@ -194,7 +197,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
                 const SizedBox(height: 32),
 
-                // ✅ Pass calculated values
                 PredictionSummary(
                   nextPeriodDate: nextPeriodStr,
                   ovulationDate: ovulationStr,
