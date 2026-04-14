@@ -16,6 +16,9 @@ class _StatsScreenState extends State<StatsScreen> {
   double _avgCycleLength = 0;
   double _avgPeriodLength = 0;
   int _lastCycleLength = 0;
+  // --- New State Variables ---
+  int _shortestCycle = 0;
+  int _longestCycle = 0;
 
   @override
   void initState() {
@@ -52,26 +55,40 @@ class _StatsScreenState extends State<StatsScreen> {
     }
     final avgPeriod = validPeriodCount > 0 ? totalPeriodDays / validPeriodCount : 0.0;
 
-    // --- B. Calculate Average & Last Cycle Length ---
-    int totalCycleDays = 0;
-    int validCycleCount = 0;
-    int lastCycle = 0;
+    // --- B. Calculate Cycle Variations & Averages (UPDATED LOGIC) ---
+    // STEP 1.1: Create list to store valid cycle lengths
+    List<int> cycleLengths = [];
+
     for (int i = 0; i < sortedEntries.length - 1; i++) {
       final length = sortedEntries[i + 1].startDate.difference(sortedEntries[i].startDate).inDays;
 
+      // STEP 1.2: Add valid lengths to the list
       if (length >= 10 && length <= 60) {
-        totalCycleDays += length;
-        validCycleCount++;
-        lastCycle = length; // The last valid one calculated is the most recent
+        cycleLengths.add(length);
       }
     }
-    final avgCycle = validCycleCount > 0 ? totalCycleDays / validCycleCount : 0.0;
+
+    double avgCycle = 0;
+    int lastCycle = 0;
+    // STEP 1.3: Calculate shortest and longest from the collected list
+    int shortest = 0;
+    int longest = 0;
+
+    if (cycleLengths.isNotEmpty) {
+      avgCycle = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
+      lastCycle = cycleLengths.last;
+      shortest = cycleLengths.reduce((a, b) => a < b ? a : b);
+      longest = cycleLengths.reduce((a, b) => a > b ? a : b);
+    }
 
     // --- Final Step: Update UI State ---
     setState(() {
       _avgPeriodLength = avgPeriod;
       _avgCycleLength = avgCycle;
       _lastCycleLength = lastCycle;
+      // STEP 1.4: Update new state variables
+      _shortestCycle = shortest;
+      _longestCycle = longest;
       _isLoading = false;
     });
   }
@@ -109,7 +126,12 @@ class _StatsScreenState extends State<StatsScreen> {
                 lastCycleLength: _lastCycleLength,
               ),
 
-              // You can add more cards/widgets below this in the future
+              // --- STEP 3: Add new card to the UI ---
+              const SizedBox(height: 24),
+              _CycleVariationCard(
+                shortestCycle: _shortestCycle,
+                longestCycle: _longestCycle,
+              ),
             ],
           ),
         ),
@@ -119,7 +141,7 @@ class _StatsScreenState extends State<StatsScreen> {
 }
 
 // ===============================================
-// UI WIDGET: Key Metrics Card
+// UI WIDGET: Key Metrics Card (Unchanged)
 // ===============================================
 class _KeyMetricsCard extends StatelessWidget {
   final double avgCycleLength;
@@ -132,7 +154,6 @@ class _KeyMetricsCard extends StatelessWidget {
     required this.lastCycleLength,
   });
 
-  /// A reusable helper widget for displaying a single metric row.
   Widget _buildMetricRow({
     required IconData icon,
     required String label,
@@ -149,7 +170,7 @@ class _KeyMetricsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: const Color(0xFF333333).withValues(alpha: 0.5)
+              color: const Color(0xFF333333).withOpacity(0.8), // Fixed
             ),
           ),
           const Spacer(),
@@ -175,12 +196,12 @@ class _KeyMetricsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.pink.withValues(alpha: 0.1),
+            color: Colors.pink.withOpacity(0.03), // Fixed
             blurRadius: 20,
             offset: const Offset(0, 5),
           ),
         ],
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.06)),
+        border: Border.all(color: Colors.pink.withOpacity(0.05)), // Fixed
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,7 +221,7 @@ class _KeyMetricsCard extends StatelessWidget {
           _buildMetricRow(
             icon: Icons.refresh_rounded,
             label: 'Average Cycle Length',
-            value: avgCycleLength > 0 ? '${avgCycleLength.toStringAsFixed(0)} days' : '--',
+            value: avgCycleLength > 0 ? '${avgCycleLength.round()} days' : '--',
           ),
           _buildMetricRow(
             icon: Icons.water_drop_outlined,
@@ -211,6 +232,98 @@ class _KeyMetricsCard extends StatelessWidget {
             icon: Icons.schedule_rounded,
             label: 'Last Cycle Length',
             value: lastCycleLength > 0 ? '$lastCycleLength days' : '--',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ===============================================
+// STEP 2: UI WIDGET: Cycle Variation Card (NEW)
+// ===============================================
+class _CycleVariationCard extends StatelessWidget {
+  final int shortestCycle;
+  final int longestCycle;
+
+  const _CycleVariationCard({
+    required this.shortestCycle,
+    required this.longestCycle,
+  });
+
+  Widget _buildVariationRow({required String label, required String value}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF333333).withOpacity(0.8),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFD36275), // Darker pink for value
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F7), // VERY LIGHT PINK background
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.pink.withOpacity(0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: Border.all(color: Colors.pink.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --- Title ---
+          const Text(
+            'Cycle Variation',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600, // Semi-bold
+              color: Color(0xFF6D4C51), // Darker pink-grey
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Based on recent cycles',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // --- Content Rows ---
+          _buildVariationRow(
+            label: 'Shortest Cycle',
+            value: shortestCycle > 0 ? '$shortestCycle days' : '--',
+          ),
+          _buildVariationRow(
+            label: 'Longest Cycle',
+            value: longestCycle > 0 ? '$longestCycle days' : '--',
           ),
         ],
       ),
