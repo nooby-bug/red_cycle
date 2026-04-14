@@ -15,6 +15,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   // --- State Variables for Metrics ---
   double _avgCycleLength = 0;
+  List<int> _periodLengths = [];
   double _avgPeriodLength = 0;
   int _lastCycleLength = 0;
   int _shortestCycle = 0;
@@ -48,11 +49,18 @@ class _StatsScreenState extends State<StatsScreen> {
     // Period Length Calculation
     int totalPeriodDays = 0;
     int validPeriodCount = 0;
+    List<int> periodLengths = [];
     for (final entry in sortedEntries) {
       if (entry.endDate != null) {
         final length = entry.endDate!.difference(entry.startDate).inDays + 1;
+
         totalPeriodDays += length;
         validPeriodCount++;
+
+        // 👇 ADD THIS
+        if (length >= 2 && length <= 10) {
+          periodLengths.add(length);
+        }
       }
     }
     final avgPeriod = validPeriodCount > 0 ? totalPeriodDays / validPeriodCount : 0.0;
@@ -101,6 +109,7 @@ class _StatsScreenState extends State<StatsScreen> {
       _shortestCycle = shortest;
       _longestCycle = longest;
       _cycleLengths = cycleLengths;
+      _periodLengths = periodLengths;
       _insightText = insightText;
       _isLoading = false;
     });
@@ -146,6 +155,9 @@ class _StatsScreenState extends State<StatsScreen> {
 
               const SizedBox(height: 24),
               _CycleTrendCard(cycleLengths: _cycleLengths),
+              const SizedBox(height: 24),
+
+              _PeriodTrendCard(periodLengths: _periodLengths),
 
               const SizedBox(height: 24),
               _InsightCard(text: _insightText),
@@ -508,6 +520,152 @@ class _CycleTrendCard extends StatelessWidget {
               ),
             ),
           ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeriodTrendCard extends StatelessWidget {
+  final List<int> periodLengths;
+
+  const _PeriodTrendCard({required this.periodLengths});
+
+  @override
+  Widget build(BuildContext context) {
+    if (periodLengths.length < 2) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF5F7),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          "Not enough data for period trend",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final spots = List.generate(
+      periodLengths.length,
+          (i) => FlSpot(i.toDouble(), periodLengths[i].toDouble()),
+    );
+
+    final minY = periodLengths.reduce((a, b) => a < b ? a : b).toDouble();
+    final maxY = periodLengths.reduce((a, b) => a > b ? a : b).toDouble();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F7),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.pink.withValues(alpha: 0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: Border.all(color: Colors.pink.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Period Length Trend',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6D4C51),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Last few periods',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          SizedBox(
+            height: 300,
+            child: LineChart(
+              LineChartData(
+                minY: minY - 1,
+                maxY: maxY + 1,
+
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) {
+                    return FlLine(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      strokeWidth: 1,
+                    );
+                  },
+                ),
+                borderData: FlBorderData(show: false),
+
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: const Color(0xFFF48FB1),
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: true),
+
+                    // 👇 ADD THIS (gradient fill)
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFFF48FB1).withValues(alpha: 0.3),
+                          const Color(0xFFF48FB1).withValues(alpha: 0.0),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                ],
+
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 1,
+                      reservedSize: 32,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          value.toInt().toString(),
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          "P${value.toInt() + 1}",
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        );
+                      },
+                    ),
+                  ),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                ),
+              ),
+            ),
           ),
         ],
       ),
