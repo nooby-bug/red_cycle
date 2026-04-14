@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
-
+import 'package:red/services/notification_service.dart';
 import 'screens/home_screen.dart';
 
-void main() {
-  runApp(const MyCycleApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await NotificationService.instance.init();
+
+  runApp(MyCycleApp());
 }
 
 class MyCycleApp extends StatelessWidget {

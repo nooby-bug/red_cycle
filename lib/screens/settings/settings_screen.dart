@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:red/screens/settings/profile_details_screen.dart';
-import 'package:red/screens/settings/cycle_settings_screen.dart'; // Adjust path if needed
+import 'package:red/screens/settings/cycle_settings_screen.dart';
+import 'package:red/screens/reminders_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -95,7 +96,14 @@ class SettingsScreen extends StatelessWidget {
                     SettingsTile(
                       icon: Icons.notifications_none_outlined,
                       title: 'Reminders',
-                      onTap: () => debugPrint('Reminders clicked'),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RemindersScreen(),
+                            ),
+                          );
+                        }
                     ),
 
                     // 4. Data Section
