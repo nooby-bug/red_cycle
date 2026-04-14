@@ -367,10 +367,23 @@ class _CycleTrendCard extends StatelessWidget {
       spots.add(FlSpot(i.toDouble(), cycleLengths[i].toDouble()));
     }
 
+    if (cycleLengths.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF5F7),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          "Not enough data for trend.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
     final minValue = cycleLengths.reduce((a, b) => a < b ? a : b);
     final maxValue = cycleLengths.reduce((a, b) => a > b ? a : b);
-    final minY = (minValue ~/ 5) * 5.0;
-    final maxY = (((maxValue + 4) ~/ 5) * 5 + 2).toDouble();
+    final minY = ((minValue - 2) ~/ 5) * 5.0;
+    final maxY = (((maxValue + 2) ~/ 5) * 5 + 5).toDouble();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
@@ -426,8 +439,9 @@ class _CycleTrendCard extends StatelessWidget {
               height: 300,
               child: LineChart(
               LineChartData(
+                clipData: FlClipData.none(),
                 minY: minY,
-                maxY: maxY +3,
+                maxY: maxY +1,
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
@@ -476,8 +490,8 @@ class _CycleTrendCard extends StatelessWidget {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 32,
-                      interval: (maxY - minY) <= 20 ? 2 : 5,
+                      reservedSize: 40,
+                        interval: 5,
                       getTitlesWidget: (value, meta) {
                         return Text(
                           value.toInt().toString(),
@@ -553,6 +567,19 @@ class _PeriodTrendCard extends StatelessWidget {
           (i) => FlSpot(i.toDouble(), periodLengths[i].toDouble()),
     );
 
+    if (periodLengths.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF5F7),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          "Not enough data for period trend.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
     final minY = periodLengths.reduce((a, b) => a < b ? a : b).toDouble();
     final maxY = periodLengths.reduce((a, b) => a > b ? a : b).toDouble();
 
@@ -595,6 +622,7 @@ class _PeriodTrendCard extends StatelessWidget {
             height: 300,
             child: LineChart(
               LineChartData(
+                clipData: FlClipData.none(),
                 minY: minY - 1,
                 maxY: maxY + 1,
 
@@ -639,7 +667,7 @@ class _PeriodTrendCard extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       interval: 1,
-                      reservedSize: 32,
+                      reservedSize: 40,
                       getTitlesWidget: (value, meta) {
                         return Text(
                           value.toInt().toString(),
