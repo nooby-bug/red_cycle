@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:red/database/database_helper.dart';
-import 'package:red/models/period_entry.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:red/database/database_helper.dart'; // Adjust path if needed
+import 'package:red/models/period_entry.dart';    // Adjust path if needed
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -13,15 +13,14 @@ class StatsScreen extends StatefulWidget {
 class _StatsScreenState extends State<StatsScreen> {
   bool _isLoading = true;
 
-  // --- Metrics ---
+  // --- State Variables for Metrics ---
   double _avgCycleLength = 0;
   double _avgPeriodLength = 0;
   int _lastCycleLength = 0;
-
   int _shortestCycle = 0;
   int _longestCycle = 0;
-
   List<int> _cycleLengths = [];
+  String _insightText = "";
 
   @override
   void initState() {
@@ -30,76 +29,79 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Future<void> _loadAndCalculateStats() async {
+    // DATABASE ACCESS: Uses getAllPeriods() directly and returns List<PeriodEntry>
     final entries = await DatabaseHelper.instance.getAllPeriods();
 
     if (!mounted) return;
 
     if (entries.length < 2) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _insightText = "Tracking more cycles can improve predictions.";
+        _isLoading = false;
+      });
       return;
     }
 
-    final sorted = List<PeriodEntry>.from(entries)
+    final sortedEntries = List<PeriodEntry>.from(entries)
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
 
-    // -------- Period Length --------
-    int totalPeriod = 0;
-    int periodCount = 0;
-
-    for (final e in sorted) {
-      if (e.endDate != null) {
-        final len = e.endDate!.difference(e.startDate).inDays + 1;
-        totalPeriod += len;
-        periodCount++;
+    // Period Length Calculation
+    int totalPeriodDays = 0;
+    int validPeriodCount = 0;
+    for (final entry in sortedEntries) {
+      if (entry.endDate != null) {
+        final length = entry.endDate!.difference(entry.startDate).inDays + 1;
+        totalPeriodDays += length;
+        validPeriodCount++;
       }
     }
+    final avgPeriod = validPeriodCount > 0 ? totalPeriodDays / validPeriodCount : 0.0;
 
-    final avgPeriod =
-    periodCount > 0 ? totalPeriod / periodCount : 0.0;
-
-    // -------- Cycle Length --------
-    int totalCycle = 0;
-    int cycleCount = 0;
-    int lastCycle = 0;
-
+    // Cycle Length, Variation, and Insight Calculation
     List<int> cycleLengths = [];
-
-    for (int i = 0; i < sorted.length - 1; i++) {
-      final len = sorted[i + 1]
-          .startDate
-          .difference(sorted[i].startDate)
-          .inDays;
-
-      if (len >= 10 && len <= 60) {
-        totalCycle += len;
-        cycleCount++;
-        lastCycle = len;
-        cycleLengths.add(len);
+    for (int i = 0; i < sortedEntries.length - 1; i++) {
+      final length = sortedEntries[i + 1].startDate.difference(sortedEntries[i].startDate).inDays;
+      if (length >= 10 && length <= 60) {
+        cycleLengths.add(length);
       }
     }
 
-    final avgCycle =
-    cycleCount > 0 ? totalCycle / cycleCount : 0.0;
-
-    // -------- Variation --------
+    double avgCycle = 0;
+    int lastCycle = 0;
     int shortest = 0;
     int longest = 0;
 
     if (cycleLengths.isNotEmpty) {
+      avgCycle = cycleLengths.reduce((a, b) => a + b) / cycleLengths.length;
+      lastCycle = cycleLengths.last;
       shortest = cycleLengths.reduce((a, b) => a < b ? a : b);
       longest = cycleLengths.reduce((a, b) => a > b ? a : b);
     }
 
-    setState(() {
-      _avgCycleLength = avgCycle;
-      _avgPeriodLength = avgPeriod;
-      _lastCycleLength = lastCycle;
+    // Insight Logic
+    String insightText;
+    int variation = longest - shortest;
 
+    if (cycleLengths.length < 3) {
+      insightText = "Tracking more cycles can improve predictions.";
+    } else {
+      if (variation <= 3) {
+        insightText = "Your cycle is fairly regular.";
+      } else if (variation <= 6) {
+        insightText = "Your cycle shows some variation.";
+      } else {
+        insightText = "Your cycle is irregular.";
+      }
+    }
+
+    setState(() {
+      _avgPeriodLength = avgPeriod;
+      _avgCycleLength = avgCycle;
+      _lastCycleLength = lastCycle;
       _shortestCycle = shortest;
       _longestCycle = longest;
-
       _cycleLengths = cycleLengths;
-
+      _insightText = insightText;
       _isLoading = false;
     });
   }
@@ -109,28 +111,25 @@ class _StatsScreenState extends State<StatsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF5F6),
       appBar: AppBar(
-        title: const Text("Cycle Insights"),
-        backgroundColor: Colors.transparent,
+        title: const Text('Cycle Insights'), // Fixed Title
         elevation: 0,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.black87,
+        centerTitle: true,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
         child: Padding(
-          padding:
-          const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 12),
-
+              const SizedBox(height: 16),
               const Text(
-                "Based on your recent cycles",
-                style:
-                TextStyle(color: Colors.black54),
+                'A summary of your recent cycle data.',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
-
               const SizedBox(height: 24),
 
               _KeyMetricsCard(
@@ -140,19 +139,18 @@ class _StatsScreenState extends State<StatsScreen> {
               ),
 
               const SizedBox(height: 24),
-
               _CycleVariationCard(
-                shortest: _shortestCycle,
-                longest: _longestCycle,
+                shortestCycle: _shortestCycle,
+                longestCycle: _longestCycle,
               ),
 
               const SizedBox(height: 24),
+              _CycleTrendCard(cycleLengths: _cycleLengths),
 
-              _CycleTrendCard(
-                cycleLengths: _cycleLengths,
-              ),
+              const SizedBox(height: 24),
+              _InsightCard(text: _insightText),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -161,9 +159,10 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 }
 
-//
-// ===================== KEY METRICS =====================
-//
+// ===============================================
+// UI WIDGETS
+// ===============================================
+
 class _KeyMetricsCard extends StatelessWidget {
   final double avgCycleLength;
   final double avgPeriodLength;
@@ -175,93 +174,33 @@ class _KeyMetricsCard extends StatelessWidget {
     required this.lastCycleLength,
   });
 
-  Widget row(String label, String value, IconData icon) {
+  Widget _buildMetricRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 10.0),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFFF06292)),
-          const SizedBox(width: 10),
+          Icon(icon, color: const Color(0xFFF06292), size: 20),
+          const SizedBox(width: 12),
           Text(
             label,
             style: TextStyle(
-              color: const Color(0xFF333333)
-                  .withValues(alpha: 0.6),
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Color(0xFFD36275),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _card(
-      title: "Your Cycle Overview",
-      children: [
-        row(
-            "Average Cycle Length",
-            avgCycleLength > 0
-                ? "${avgCycleLength.round()} days"
-                : "--",
-            Icons.refresh),
-        row(
-            "Average Period Length",
-            avgPeriodLength > 0
-                ? "${avgPeriodLength.round()} days"
-                : "--",
-            Icons.water_drop),
-        row(
-            "Last Cycle Length",
-            lastCycleLength > 0
-                ? "$lastCycleLength days"
-                : "--",
-            Icons.schedule),
-      ],
-    );
-  }
-}
-
-//
-// ===================== VARIATION =====================
-//
-class _CycleVariationCard extends StatelessWidget {
-  final int shortest;
-  final int longest;
-
-  const _CycleVariationCard({
-    required this.shortest,
-    required this.longest,
-  });
-  Widget _buildSimpleRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: const Color(0xFF333333)
-                  .withValues(alpha: 0.6),
               fontSize: 15,
               fontWeight: FontWeight.w500,
+              // Replaced withOpacity with withValues(alpha:)
+              color: const Color(0xFF333333).withValues(alpha: 0.5),
             ),
           ),
           const Spacer(),
           Text(
             value,
             style: const TextStyle(
+              fontSize: 15,
               fontWeight: FontWeight.bold,
               color: Color(0xFFD36275),
-              fontSize: 15,
             ),
           ),
         ],
@@ -271,26 +210,139 @@ class _CycleVariationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _card(
-      title: "Cycle Variation",
-      subtitle: "Based on recent cycles",
-      children: [
-        _buildSimpleRow(
-          "Shortest Cycle",
-          shortest > 0 ? "$shortest days" : "--",
-        ),
-        _buildSimpleRow(
-          "Longest Cycle",
-          longest > 0 ? "$longest days" : "--",
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F7),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.pink.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: Border.all(color: Colors.pink.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Your Cycle Overview',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6D4C51),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildMetricRow(
+            icon: Icons.refresh_rounded,
+            label: 'Average Cycle Length',
+            value: avgCycleLength > 0 ? '${avgCycleLength.round()} days' : '--',
+          ),
+          _buildMetricRow(
+            icon: Icons.water_drop_outlined,
+            label: 'Average Period Length',
+            value: avgPeriodLength > 0 ? '${avgPeriodLength.round()} days' : '--',
+          ),
+          _buildMetricRow(
+            icon: Icons.schedule_rounded,
+            label: 'Last Cycle Length',
+            value: lastCycleLength > 0 ? '$lastCycleLength days' : '--',
+          ),
+        ],
+      ),
     );
   }
 }
 
-//
-// ===================== TREND =====================
-//
+class _CycleVariationCard extends StatelessWidget {
+  final int shortestCycle;
+  final int longestCycle;
+
+  const _CycleVariationCard({
+    required this.shortestCycle,
+    required this.longestCycle,
+  });
+
+  Widget _buildVariationRow({required String label, required String value}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF333333).withValues(alpha: 0.8),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFD36275),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F7),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.pink.withValues(alpha: 0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: Border.all(color: Colors.pink.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Cycle Variation',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6D4C51),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Based on recent cycles',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildVariationRow(
+            label: 'Shortest Cycle',
+            value: shortestCycle > 0 ? '$shortestCycle days' : '--',
+          ),
+          _buildVariationRow(
+            label: 'Longest Cycle',
+            value: longestCycle > 0 ? '$longestCycle days' : '--',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CycleTrendCard extends StatelessWidget {
   final List<int> cycleLengths;
 
@@ -298,165 +350,216 @@ class _CycleTrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (cycleLengths.length < 2) {
-      return _card(
-        title: "Cycle Trend",
-        subtitle: "Last few cycles",
-        children: const [
-          Text("Not enough data for trend"),
-        ],
-      );
+    final List<FlSpot> spots = [];
+    for (int i = 0; i < cycleLengths.length; i++) {
+      spots.add(FlSpot(i.toDouble(), cycleLengths[i].toDouble()));
     }
-    final minY =
-    cycleLengths.reduce((a, b) => a < b ? a : b).toDouble();
-    final maxY =
-    cycleLengths.reduce((a, b) => a > b ? a : b).toDouble();
 
-    final spots = List.generate(
-      cycleLengths.length,
-          (i) => FlSpot(
-        i.toDouble(),
-        cycleLengths[i].toDouble(),
+    final minValue = cycleLengths.reduce((a, b) => a < b ? a : b);
+    final maxValue = cycleLengths.reduce((a, b) => a > b ? a : b);
+    final minY = (minValue ~/ 5) * 5.0;
+    final maxY = (((maxValue + 4) ~/ 5) * 5 + 2).toDouble();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F7),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.pink.withValues(alpha: 0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        border: Border.all(color: Colors.pink.withValues(alpha: 0.05)),
       ),
-    );
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Cycle Trend',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6D4C51),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Last few cycles',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 24),
 
-    return _card(
-      title: "Cycle Trend",
-      subtitle: "Last few cycles",
-      children: [
-        SizedBox(
-          height: 200,
-          child: LineChart(
-            LineChartData(
-              minY: minY - 2,
-              maxY: maxY + 2,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                getDrawingHorizontalLine: (value) {
-                  return FlLine(
-                    color: Colors.grey
-                        .withValues(alpha: 0.1),
-                    strokeWidth: 1,
-                  );
-                },
+          cycleLengths.length < 2
+              ? const SizedBox(
+            height: 150,
+            child: Center(
+              child: Text(
+                "Not enough data for trend.",
+                style: TextStyle(color: Colors.grey),
               ),
-              titlesData: FlTitlesData(
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    interval: 2,
-                    reservedSize: 32,
-                    getTitlesWidget: (value, meta) {
-                      return Text(
-                        value.toInt().toString(),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey,
-                        ),
-                      );
-                    },
-                  ),
+            ),
+          )
+              : SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: (cycleLengths.length * 50)
+                  .clamp(300, double.infinity)
+                  .toDouble(),
+              height: 300,
+              child: LineChart(
+              LineChartData(
+                minY: minY,
+                maxY: maxY +3,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) {
+                    return FlLine(
+                      color: Colors.grey.withValues(alpha: 0.08),
+                      strokeWidth: 1,
+                    );
+                  },
                 ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    interval: 1,
-                    getTitlesWidget: (value, meta) {
-                      final index = value.toInt();
-
-                      if (index < 0 || index >= cycleLengths.length) {
-                        return const SizedBox();
-                      }
-
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          "C${index + 1}",
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    preventCurveOverShooting: true,
+                    color: const Color(0xFFF48FB1),
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) {
+                        return FlDotCirclePainter(
+                          radius: 4,
+                          color: const Color(0xFFF48FB1),
+                          strokeWidth: 0,
+                        );
+                      },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFFF48FB1).withValues(alpha: 0.3),
+                          const Color(0xFFF48FB1).withValues(alpha: 0.0),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                ],
+                titlesData: FlTitlesData(
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      interval: (maxY - minY) <= 20 ? 2 : 5,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          value.toInt().toString(),
                           style: const TextStyle(
                             fontSize: 11,
                             color: Colors.grey,
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 1,
+                      reservedSize: 28,
+                      getTitlesWidget: (value, meta) {
+                        if (value % 1 != 0) return const SizedBox();
+
+                        final index = value.toInt();
+
+                        if (index < 0 || index >= cycleLengths.length) {
+                          return const SizedBox();
+                        }
+
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'C${index + 1}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
-                rightTitles: AxisTitles(
-                    sideTitles:
-                    SideTitles(showTitles: false)),
-                topTitles: AxisTitles(
-                    sideTitles:
-                    SideTitles(showTitles: false)),
               ),
-              borderData:
-              FlBorderData(show: false),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isCurved: true,
-                  curveSmoothness: 0.15,
-                  color: const Color(0xFFF48FB1),
-                  barWidth: 3,
-                  dotData: FlDotData(show: true),
-                ),
-              ],
             ),
           ),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }
 
-//
-// ===================== COMMON CARD =====================
-//
-Widget _card({
-  required String title,
-  String? subtitle,
-  required List<Widget> children,
-}) {
-  return Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: const Color(0xFFFFF5F7),
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.pink.withValues(alpha: 0.08),
-          blurRadius: 20,
-          offset: const Offset(0, 5),
-        ),
-      ],
-      border: Border.all(
-        color: Colors.pink.withValues(alpha: 0.05),
-      ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-            color: Color(0xFF6D4C51),
+class _InsightCard extends StatelessWidget {
+  final String text;
+
+  const _InsightCard({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFEFF3),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.pink.withValues(alpha: 0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
           ),
-        ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 4),
+        ],
+        border: Border.all(color: Colors.pink.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Insights',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6D4C51),
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
-            subtitle,
+            text,
             style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF444444),
+              height: 1.4,
             ),
           ),
         ],
-        const SizedBox(height: 12),
-        ...children,
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
