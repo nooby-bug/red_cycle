@@ -5,7 +5,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
@@ -21,28 +20,31 @@ class NotificationService {
   bool _initialized = false;
 
   // ---------------------------------------------------------------------------
-  // PUBLIC API (matches your existing UI calls)
+  // PUBLIC API
   // ---------------------------------------------------------------------------
 
   Future<void> init() async {
     if (_initialized) return;
 
-    // 1. Initialize timezone database + set device-local tz explicitly.
+    // 1. Initialize timezone
     tz.initializeTimeZones();
     try {
-      final String localTz = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(localTz));
-      debugPrint('NotificationService: timezone set to $localTz');
+      final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
+
+      // ✅ FIX: correct variable used here
+      debugPrint('NotificationService: timezone set to ${timezoneInfo.identifier}');
     } catch (e) {
-      debugPrint('NotificationService: failed to resolve local tz ($e), '
-          'falling back to default. Notifications may fire in UTC.');
+      debugPrint(
+        'NotificationService: failed to resolve local tz ($e), falling back to default.',
+      );
     }
 
-    // 2. Initialize the plugin (Android only here; add iOS settings if needed).
-    const AndroidInitializationSettings androidInit =
+    // 2. Initialize plugin
+    const androidInit =
     AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initSettings = InitializationSettings(
+    const initSettings = InitializationSettings(
       android: androidInit,
     );
 
@@ -51,10 +53,8 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
-    // 3. Pre-create the channel (Android 8+) so importance/sound are correct
-    //    on first delivery.
-    final AndroidFlutterLocalNotificationsPlugin? androidImpl = _plugin
-        .resolvePlatformSpecificImplementation<
+    // 3. Create notification channel
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
 
     await androidImpl?.createNotificationChannel(
@@ -70,47 +70,33 @@ class NotificationService {
     debugPrint('NotificationService: init complete');
   }
 
-  /// Requests notification permission.
-  /// Android 13+ requires POST_NOTIFICATIONS at runtime.
-  /// Returns true if granted.
   Future<bool> requestPermission() async {
-    // Plugin-level request (Android 13+).
-    final AndroidFlutterLocalNotificationsPlugin? androidImpl = _plugin
-        .resolvePlatformSpecificImplementation<
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
 
-    final bool? pluginGranted =
+    final pluginGranted =
     await androidImpl?.requestNotificationsPermission();
 
-    // Fallback / double-check via permission_handler (covers older devices
-    // and gives a single source of truth for the UI).
-    final PermissionStatus status = await Permission.notification.request();
+    final status = await Permission.notification.request();
 
-    final bool granted = (pluginGranted ?? false) || status.isGranted;
+    final granted = (pluginGranted ?? false) || status.isGranted;
     debugPrint('NotificationService: permission granted = $granted');
+
     return granted;
   }
 
-  /// Schedules a daily notification at [hour]:[minute] (24h, device-local time).
-  /// If that time has already passed today, fires once immediately and then
-  /// schedules tomorrow's occurrence.
   Future<void> scheduleDailyNotification(int hour, int minute) async {
-    assert(_initialized, 'Call NotificationService.instance.init() first');
+    assert(_initialized, 'Call init() first');
 
-    // Always cancel the previous schedule before re-scheduling so we never
-    // end up with stacked duplicates after the user changes the time.
     await _plugin.cancel(id: _dailyNotificationId);
 
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    final tz.TZDateTime scheduled = _nextInstanceOf(hour, minute);
+    final now = tz.TZDateTime.now(tz.local);
+    final scheduled = _nextInstanceOf(hour, minute);
 
-    debugPrint('NOW:       $now');
-    debugPrint('SCHEDULED: $scheduled (daily at $hour:${minute.toString().padLeft(2, '0')})');
+    debugPrint('NOW: $now');
+    debugPrint('SCHEDULED: $scheduled');
 
-    // Fail-safe: if the user-chosen time is in the past for today, fire now.
-    // _nextInstanceOf already rolls forward to tomorrow, so we just need to
-    // detect "originally in the past" and trigger an immediate show.
-    final tz.TZDateTime todaysSlot = tz.TZDateTime(
+    final todaysSlot = tz.TZDateTime(
       tz.local,
       now.year,
       now.month,
@@ -119,8 +105,10 @@ class NotificationService {
       minute,
     );
 
+    // 🔥 Fail-safe
     if (todaysSlot.isBefore(now)) {
-      debugPrint('TRIGGERED: immediate (chosen time already passed today)');
+      debugPrint('TRIGGERED: immediate');
+
       await _plugin.show(
         id: _dailyNotificationId + 1,
         title: _title,
@@ -142,12 +130,12 @@ class NotificationService {
   }
 
   Future<void> cancelAll() async {
-    await _plugin.cancel(id: _dailyNotificationId);
+    await _plugin.cancelAll(); // ✅ better than cancel(id)
     debugPrint('CANCELLED: all notifications');
   }
 
   // ---------------------------------------------------------------------------
-  // INTERNAL HELPERS
+  // HELPERS
   // ---------------------------------------------------------------------------
 
   static const String _title = 'Daily Reminder';
@@ -167,11 +155,10 @@ class NotificationService {
     );
   }
 
-  /// Returns the next [tz.TZDateTime] matching [hour]:[minute] in device-local
-  /// time. If the time has already passed today, rolls forward to tomorrow.
   tz.TZDateTime _nextInstanceOf(int hour, int minute) {
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduled = tz.TZDateTime(
+    final now = tz.TZDateTime.now(tz.local);
+
+    var scheduled = tz.TZDateTime(
       tz.local,
       now.year,
       now.month,
@@ -179,14 +166,15 @@ class NotificationService {
       hour,
       minute,
     );
+
     if (!scheduled.isAfter(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
+
     return scheduled;
   }
 
   void _onNotificationTap(NotificationResponse response) {
     debugPrint('TRIGGERED: tap payload=${response.payload}');
-    // Hook your navigation / deep-link logic here.
   }
 }
