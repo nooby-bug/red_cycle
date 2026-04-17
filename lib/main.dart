@@ -5,9 +5,13 @@ import 'screens/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await NotificationService.instance.init();
+  try {
+    await NotificationService.instance.init();
+  } catch (e) {
+    debugPrint("Notification init failed: $e");
+  }
 
-  runApp(MyCycleApp());
+  runApp(const MyCycleApp());
 }
 
 class MyCycleApp extends StatelessWidget {

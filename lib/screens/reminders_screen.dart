@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:red/services/notification_service.dart';
 
 class RemindersScreen extends StatefulWidget {
   const RemindersScreen({super.key});
@@ -18,25 +19,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
   bool _loggingReminderEnabled = false;
   TimeOfDay _reminderTime = const TimeOfDay(hour: 8, minute: 0);
 
-  // --- NOTIFICATION PLUGIN ---
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
   @override
   void initState() {
     super.initState();
-    _initNotifications();
     _loadSettings();
-  }
-
-  // --- 1. INITIALIZE PLUGIN ---
-  Future<void> _initNotifications() async {
-    const AndroidInitializationSettings androidSettings =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initSettings =
-    InitializationSettings(android: androidSettings);
-
-    await flutterLocalNotificationsPlugin.initialize(initSettings);
   }
 
   Future<void> _loadSettings() async {
@@ -64,43 +50,24 @@ class _RemindersScreenState extends State<RemindersScreen> {
     }
   }
 
-  // --- 2. HANDLE MASTER TOGGLE & PERMISSIONS ---
   Future<void> _handleMasterToggle(bool value) async {
     if (value) {
-      // User is turning ON reminders -> Request Permission
-      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-      flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final granted = await NotificationService.instance.requestPermission();
 
-      final bool? granted = await androidImplementation?.requestNotificationsPermission();
-
-      if (granted == false) {
-        // Permission denied: Revert toggle and show message
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Notification permission is required to use reminders.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-        setState(() {
-          _masterEnabled = false;
-        });
+      if (!granted) {
+        setState(() => _masterEnabled = false);
         return;
       }
+
+      await NotificationService.instance.scheduleDailyNotification(
+        _reminderTime.hour,
+        _reminderTime.minute,
+      );
+    } else {
+      await NotificationService.instance.cancelAll();
     }
 
-    // Permission granted (or turning OFF) -> Proceed normally
-    setState(() {
-      _masterEnabled = value;
-      // Optional UX choice: turn off sub-switches when master is off
-      if (!value) {
-        _periodReminderEnabled = false;
-        _loggingReminderEnabled = false;
-        _saveSetting('reminders_period', false);
-        _saveSetting('reminders_logging', false);
-      }
-    });
+    setState(() => _masterEnabled = value);
     await _saveSetting('reminders_master', value);
   }
 
@@ -226,33 +193,36 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: () async {
-                          final selectedMinute = selectedMinuteIndex * 5;
-                          final newTime = TimeOfDay(hour: selectedHour, minute: selectedMinute);
+                          onPressed: () async {
+                            final selectedMinute = selectedMinuteIndex * 5;
+                            final newTime = TimeOfDay(hour: selectedHour, minute: selectedMinute);
 
-                          setState(() {
-                            _reminderTime = newTime;
-                          });
+                            setState(() {
+                              _reminderTime = newTime;
+                            });
 
-                          await _saveSetting('reminders_time_hour', selectedHour);
-                          await _saveSetting('reminders_time_minute', selectedMinute);
+                            await _saveSetting('reminders_time_hour', selectedHour);
+                            await _saveSetting('reminders_time_minute', selectedMinute);
 
-                          if (context.mounted) Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF06292),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: const Text(
-                          'Save',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                            // 🔥 ADD THIS PART (THIS IS STEP 5)
+                            if (_masterEnabled) {
+                              await NotificationService.instance.cancelAll();
+
+                              await NotificationService.instance.scheduleDailyNotification(
+                                _reminderTime.hour,
+                                _reminderTime.minute,
+                              );
+                            }
+
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                          child: const Text(
+                              'Save',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,)
+                          )
+                      )
                     ],
                   ),
                 ],
