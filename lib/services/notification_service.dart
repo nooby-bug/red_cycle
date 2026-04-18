@@ -4,56 +4,96 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:red/models/period_entry.dart';
+
+
+// Internal helper model for prediction data
+class _PredictionData {
+  final DateTime nextPeriod;
+  final DateTime ovulation;
+  final DateTime fertileStart;
+  final DateTime fertileEnd;
+
+  _PredictionData({
+    required this.nextPeriod,
+    required this.ovulation,
+    required this.fertileStart,
+    required this.fertileEnd,
+  });
+}
 
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
+  // --- Notification IDs ---
   static const int _dailyNotificationId = 1001;
+  static const int _periodUpcomingId = 2001;
+  static const int _periodStartId = 2002;
+  static const int _ovulationId = 3001;
+  static const int _fertileWindowId = 3002;
+
   static const String _channelId = 'daily_reminder_channel';
   static const String _channelName = 'Daily Reminders';
   static const String _channelDesc = 'Daily reminder notifications';
 
-  final FlutterLocalNotificationsPlugin _plugin =
-  FlutterLocalNotificationsPlugin();
-
+  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
   // ---------------------------------------------------------------------------
-  // PUBLIC API
+  // EXISTING PUBLIC API (UNCHANGED)
   // ---------------------------------------------------------------------------
+
+  Future<void> refreshAllReminders({
+    required List<PeriodEntry> history,
+    required int hour,
+    required int minute,
+    required bool periodEnabled,
+    required bool loggingEnabled,
+  }) async {
+    assert(_initialized, 'Call init() first');
+
+    debugPrint("🔁 REFRESHING ALL REMINDERS");
+
+    await cancelAll();
+
+    // Daily reminder (logging)
+    if (loggingEnabled) {
+      await scheduleDailyNotification(hour, minute);
+    }
+
+    // Cycle reminders
+    if (periodEnabled) {
+      await scheduleCycleReminders(history);
+    }
+  }
 
   Future<void> init() async {
     if (_initialized) return;
 
-    // 1. Initialize timezone
     tz.initializeTimeZones();
-    try {
-      final timezoneInfo = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
 
-      // ✅ FIX: correct variable used here
-      debugPrint('NotificationService: timezone set to ${timezoneInfo.identifier}');
+    try {
+      final TimezoneInfo timezoneInfo = await FlutterTimezone.getLocalTimezone();
+      final String tzName = timezoneInfo.identifier;
+
+      tz.setLocalLocation(tz.getLocation(tzName));
+      debugPrint('NotificationService: timezone set to $tzName');
     } catch (e) {
-      debugPrint(
-        'NotificationService: failed to resolve local tz ($e), falling back to default.',
-      );
+      debugPrint('NotificationService: failed to resolve local tz ($e)');
     }
 
-    // 2. Initialize plugin
-    const androidInit =
+    const AndroidInitializationSettings androidInit =
     AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const initSettings = InitializationSettings(
-      android: androidInit,
-    );
+    const InitializationSettings initSettings =
+    InitializationSettings(android: androidInit);
 
     await _plugin.initialize(
       settings: initSettings,
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
-    // 3. Create notification channel
     final androidImpl = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
 
@@ -135,6 +175,212 @@ class NotificationService {
   }
 
   // ---------------------------------------------------------------------------
+  // NEW SMART CYCLE REMINDER LOGIC
+  // ---------------------------------------------------------------------------
+
+  /// Schedules all relevant cycle-based reminders for the near future.
+  Future<void> scheduleCycleReminders(List<PeriodEntry> history) async {
+    assert(_initialized, 'Call init() first');
+    debugPrint("--- Running Smart Cycle Reminder Scheduling ---");
+
+    // 1. Cancel previous cycle reminders to avoid duplicates
+    await _cancelCycleReminders();
+
+    // 2. Validate data
+    if (history.isEmpty) {
+      debugPrint("⛔ No history → skipping cycle reminders");
+      return;
+    }
+
+    if (history.length < 2) {
+      debugPrint(
+          "⛔ Not enough data (need ≥2 cycles) → skipping cycle reminders");
+      return;
+    }
+
+// 3. Calculate predictions
+    final int avgCycleLength = _calculateAverageCycleLength(history);
+
+    final latest = history
+        .map((e) => e.startDate)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+
+    final predictions = _calculatePredictions(latest, avgCycleLength);
+
+    final upcomingEvents = _getUpcomingEvents(predictions);
+
+// 4. Schedule each event
+    for (final event in upcomingEvents) {
+      await _scheduleOneTimeNotification(
+        id: event['id'],
+        title: event['title'],
+        body: event['body'],
+        scheduledDateTime: event['date'],
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // CYCLE PREDICTION HELPERS
+  // ---------------------------------------------------------------------------
+
+  /// Calculates the average cycle length from the last 6 cycles.
+  int _calculateAverageCycleLength(List<PeriodEntry> history) {
+    if (history.length < 2) {
+      debugPrint("⚠️ Not enough data for prediction");
+      return 28;
+    }
+    final sorted = List<PeriodEntry>.from(history)..sort((a, b) => a.startDate.compareTo(b.startDate));
+    final recent = sorted.length > 6 ? sorted.sublist(sorted.length - 6) : sorted;
+
+    List<int> lengths = [];
+    for (int i = 0; i < recent.length - 1; i++) {
+      final diff = recent[i + 1].startDate.difference(recent[i].startDate).inDays;
+      lengths.add(diff);
+    }
+
+    if (lengths.isEmpty) return 28;
+
+    final avg = lengths.reduce((a, b) => a + b) / lengths.length;
+    final avgRounded = avg.round();
+    debugPrint("CYCLE AVG: $avgRounded days (from ${lengths.length} cycles)");
+    return avgRounded;
+  }
+
+  /// Predicts key cycle dates based on the last period start.
+  _PredictionData _calculatePredictions(DateTime lastStartDate, int avgCycleLength) {
+    final nextPeriod = lastStartDate.add(Duration(days: avgCycleLength));
+    final ovulation = nextPeriod.subtract(const Duration(days: 14));
+    final fertileStart = ovulation.subtract(const Duration(days: 2));
+    final fertileEnd = ovulation.add(const Duration(days: 2));
+
+    debugPrint("NEXT PERIOD: ${nextPeriod.toIso8601String()}");
+    debugPrint("OVULATION: ${ovulation.toIso8601String()}");
+
+    return _PredictionData(
+        nextPeriod: nextPeriod,
+        ovulation: ovulation,
+        fertileStart: fertileStart,
+        fertileEnd: fertileEnd);
+  }
+
+  /// Gathers and filters all potential reminder events for the next 7 days.
+  List<Map<String, dynamic>> _getUpcomingEvents(_PredictionData predictions) {
+    final now = tz.TZDateTime.now(tz.local);
+    final sevenDaysFromNow = now.add(const Duration(days: 7));
+
+    final Map<int, Map<String, dynamic>> events = {
+      _periodUpcomingId: {
+        'date': predictions.nextPeriod.subtract(const Duration(days: 2)),
+        'title': '🩸 Period Coming Soon',
+        'body': 'Your next period is predicted in 2 days.',
+      },
+      _periodStartId: {
+        'date': predictions.nextPeriod,
+        'title': '🩸 Period May Start Today',
+        'body': 'Your period is predicted today.',
+      },
+      _ovulationId: {
+        'date': predictions.ovulation,
+        'title': '🌸 Ovulation Day',
+        'body': 'Today is your ovulation day.',
+      },
+      _fertileWindowId: {
+        'date': predictions.fertileStart,
+        'title': '🌸 Fertile Window',
+        'body': 'Fertile window begins today.',
+      },
+    };
+
+    List<Map<String, dynamic>> result = [];
+
+    events.forEach((id, data) {
+      final DateTime eventDate = data['date'];
+
+      final DateTime scheduled = DateTime(
+        eventDate.year,
+        eventDate.month,
+        eventDate.day,
+        9,
+      );
+
+      debugPrint("📅 EVENT CHECK → ${data['title']} at $scheduled");
+
+      // ❌ Skip past events (unless today)
+      if (scheduled.isBefore(now) &&
+          !_isSameDay(scheduled, now)) {
+        debugPrint("⛔ SKIPPED (past event)");
+        return;
+      }
+
+      // ❌ Skip far future (>7 days)
+      if (scheduled.isAfter(sevenDaysFromNow)) {
+        debugPrint("⛔ SKIPPED (too far)");
+        return;
+      }
+
+      result.add({
+        'id': id,
+        'title': data['title'],
+        'body': data['body'],
+        'date': scheduled,
+      });
+    });
+
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // NOTIFICATION SCHEDULING HELPERS
+  // ---------------------------------------------------------------------------
+
+  /// Schedules a single, one-time notification for a future date.
+  Future<void> _scheduleOneTimeNotification({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledDateTime,
+  }) async {
+    final now = tz.TZDateTime.now(tz.local);
+
+    // Fail-safe: If the scheduled time has already passed today, show immediately.
+    if (scheduledDateTime.isBefore(now)) {
+      debugPrint("SCHEDULED EVENT (IMMEDIATE): '$title' for now (was ${scheduledDateTime.toIso8601String()})");
+      await _plugin.show(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: _notificationDetails(),
+      );
+      return;
+    }
+
+    debugPrint("SCHEDULED EVENT: '$title' for ${scheduledDateTime.toIso8601String()}");
+    await _plugin.zonedSchedule(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: tz.TZDateTime.from(scheduledDateTime, tz.local),
+      notificationDetails: _notificationDetails(),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+
+    );
+  }
+
+  /// Cancels only the cycle-specific reminders, leaving the daily one intact.
+  Future<void> _cancelCycleReminders() async {
+    await _plugin.cancel(id: _periodUpcomingId);
+    await _plugin.cancel(id: _periodStartId);
+    await _plugin.cancel(id: _ovulationId);
+    await _plugin.cancel(id: _fertileWindowId);
+    debugPrint("CANCELLED: previous cycle reminders.");
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  // ---------------------------------------------------------------------------
   // HELPERS
   // ---------------------------------------------------------------------------
 
@@ -177,4 +423,5 @@ class NotificationService {
   void _onNotificationTap(NotificationResponse response) {
     debugPrint('TRIGGERED: tap payload=${response.payload}');
   }
+
 }

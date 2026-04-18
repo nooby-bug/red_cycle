@@ -10,7 +10,8 @@ import '../../services/calendar_service.dart';
 import '../../utils/user_preferences.dart';
 import '../../database/database_helper.dart';
 import 'package:red/models/period_entry.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:red/services/notification_service.dart';
 class CalendarMonthView extends StatefulWidget {
   final DateTime month;
 
@@ -378,8 +379,26 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                         final id = await DatabaseHelper.instance.insertPeriod(newStart);
                         await DatabaseHelper.instance.endPeriod(id, newEnd);
 
-                        // 🔄 Refresh
+                        // 🔄 Refresh local UI data
                         await _loadPeriods();
+
+                        final updatedHistory = await DatabaseHelper.instance.getAllPeriods();
+
+                        final prefs = await SharedPreferences.getInstance();
+
+                        final hour = prefs.getInt('reminders_time_hour') ?? 8;
+                        final minute = prefs.getInt('reminders_time_minute') ?? 0;
+
+                        final periodEnabled = prefs.getBool('reminders_period') ?? false;
+                        final loggingEnabled = prefs.getBool('reminders_logging') ?? false;
+
+                        await NotificationService.instance.refreshAllReminders(
+                          history: updatedHistory,
+                          hour: hour,
+                          minute: minute,
+                          periodEnabled: periodEnabled,
+                          loggingEnabled: loggingEnabled,
+                        );
 
                         Navigator.pop(context);
                       },
@@ -434,6 +453,18 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                   if (entry.id != null) {
                     await DatabaseHelper.instance.deletePeriod(entry.id!);
                     await _loadPeriods();
+
+                    final updatedHistory = await DatabaseHelper.instance.getAllPeriods();
+
+                    final prefs = await SharedPreferences.getInstance();
+
+                    await NotificationService.instance.refreshAllReminders(
+                      history: updatedHistory,
+                      hour: prefs.getInt('reminders_time_hour') ?? 8,
+                      minute: prefs.getInt('reminders_time_minute') ?? 0,
+                      periodEnabled: prefs.getBool('reminders_period') ?? false,
+                      loggingEnabled: prefs.getBool('reminders_logging') ?? false,
+                    );
                   }
 
                   Navigator.pop(context);

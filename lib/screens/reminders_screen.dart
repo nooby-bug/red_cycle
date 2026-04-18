@@ -1,8 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:red/services/notification_service.dart';
+import 'package:red/database/database_helper.dart';
+import 'package:red/models/period_entry.dart';
 
 class RemindersScreen extends StatefulWidget {
   const RemindersScreen({super.key});
@@ -25,6 +26,15 @@ class _RemindersScreenState extends State<RemindersScreen> {
     _loadSettings();
   }
 
+  Future<List<PeriodEntry>> _getPeriodHistory() async {
+    final List<PeriodEntry> data =
+    await DatabaseHelper.instance.getAllPeriods();
+
+    debugPrint("📊 DB FETCH: ${data.length} entries");
+
+    return data;
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -40,6 +50,25 @@ class _RemindersScreenState extends State<RemindersScreen> {
       _isLoading = false;
     });
   }
+
+  // Future<List<PeriodEntry>> _getPeriodHistory() async {
+  //   final now = DateTime.now();
+  //
+  //   return [
+  //     PeriodEntry(
+  //       startDate: now.subtract(const Duration(days: 26)), // 🔥 key change
+  //       endDate: now.subtract(const Duration(days: 22)),
+  //     ),
+  //     PeriodEntry(
+  //       startDate: now.subtract(const Duration(days: 54)),
+  //       endDate: now.subtract(const Duration(days: 50)),
+  //     ),
+  //     PeriodEntry(
+  //       startDate: now.subtract(const Duration(days: 82)),
+  //       endDate: now.subtract(const Duration(days: 78)),
+  //     ),
+  //   ];
+  // }
 
   Future<void> _saveSetting(String key, dynamic value) async {
     final prefs = await SharedPreferences.getInstance();
@@ -59,10 +88,17 @@ class _RemindersScreenState extends State<RemindersScreen> {
         return;
       }
 
-      await NotificationService.instance.scheduleDailyNotification(
-        _reminderTime.hour,
-        _reminderTime.minute,
+      // 🔥 THIS IS THE NEW BLOCK
+      final history = await _getPeriodHistory();
+
+      await NotificationService.instance.refreshAllReminders(
+        history: history,
+        hour: _reminderTime.hour,
+        minute: _reminderTime.minute,
+        periodEnabled: _periodReminderEnabled,
+        loggingEnabled: _loggingReminderEnabled,
       );
+
     } else {
       await NotificationService.instance.cancelAll();
     }
@@ -208,9 +244,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
                             if (_masterEnabled) {
                               await NotificationService.instance.cancelAll();
 
-                              await NotificationService.instance.scheduleDailyNotification(
-                                _reminderTime.hour,
-                                _reminderTime.minute,
+                              final history = await _getPeriodHistory();
+
+                              await NotificationService.instance.refreshAllReminders(
+                                history: history,
+                                hour: _reminderTime.hour,
+                                minute: _reminderTime.minute,
+                                periodEnabled: _periodReminderEnabled,
+                                loggingEnabled: _loggingReminderEnabled,
                               );
                             }
 
