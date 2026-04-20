@@ -6,6 +6,24 @@ class UserPreferences {
   static const String _keyCycleLength = 'user_cycle_length';
   static const String _keyPeriodLength = 'user_period_length';
 
+  // ------------------ CYCLE REMINDER TIME ------------------
+
+  static Future<int?> getCycleReminderHour() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('cycle_reminder_hour');
+  }
+
+  static Future<int?> getCycleReminderMinute() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('cycle_reminder_minute');
+  }
+
+  static Future<void> setCycleReminderTime(int hour, int minute) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('cycle_reminder_hour', hour);
+    await prefs.setInt('cycle_reminder_minute', minute);
+  }
+
   // --- NAME ---
   static Future<void> saveName(String name) async {
     final prefs = await SharedPreferences.getInstance();

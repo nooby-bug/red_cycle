@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:red/services/notification_service.dart';
 import 'package:red/database/database_helper.dart';
 import 'package:red/models/period_entry.dart';
+import 'package:red/utils/user_preferences.dart';
 
 class RemindersScreen extends StatefulWidget {
   const RemindersScreen({super.key});
@@ -24,6 +25,28 @@ class _RemindersScreenState extends State<RemindersScreen> {
   void initState() {
     super.initState();
     _loadSettings();
+  }
+
+  bool _isRescheduling = false;
+
+  Future<void> _rescheduleNotifications() async {
+    if (!_masterEnabled || _isRescheduling) return;
+
+    _isRescheduling = true;
+
+    debugPrint("🔁 RESCHEDULING NOTIFICATIONS...");
+
+    final history = await _getPeriodHistory();
+
+    await NotificationService.instance.refreshAllReminders(
+      history: history,
+      hour: _reminderTime.hour,
+      minute: _reminderTime.minute,
+      periodEnabled: _periodReminderEnabled,
+      loggingEnabled: _loggingReminderEnabled,
+    );
+
+    _isRescheduling = false;
   }
 
   Future<List<PeriodEntry>> _getPeriodHistory() async {
@@ -237,22 +260,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
                               _reminderTime = newTime;
                             });
 
-                            await _saveSetting('reminders_time_hour', selectedHour);
-                            await _saveSetting('reminders_time_minute', selectedMinute);
+                            await UserPreferences.setCycleReminderTime(selectedHour, selectedMinute);
 
                             // 🔥 ADD THIS PART (THIS IS STEP 5)
                             if (_masterEnabled) {
-                              await NotificationService.instance.cancelAll();
-
-                              final history = await _getPeriodHistory();
-
-                              await NotificationService.instance.refreshAllReminders(
-                                history: history,
-                                hour: _reminderTime.hour,
-                                minute: _reminderTime.minute,
-                                periodEnabled: _periodReminderEnabled,
-                                loggingEnabled: _loggingReminderEnabled,
-                              );
+                              await _rescheduleNotifications();
                             }
 
                             if (context.mounted) Navigator.pop(context);
@@ -389,10 +401,12 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       subtitle: 'Get notified before your next period',
                       value: _periodReminderEnabled,
                       disabled: !_masterEnabled,
-                      onChanged: (bool value) {
-                        setState(() => _periodReminderEnabled = value);
-                        _saveSetting('reminders_period', value);
-                      },
+                        onChanged: (bool value) async {
+                          setState(() => _periodReminderEnabled = value);
+                          await _saveSetting('reminders_period', value);
+
+                          await _rescheduleNotifications();
+                        }
                     ),
                     Divider(
                       height: 1,
@@ -405,10 +419,12 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       subtitle: 'Reminds you to log your period',
                       value: _loggingReminderEnabled,
                       disabled: !_masterEnabled,
-                      onChanged: (bool value) {
-                        setState(() => _loggingReminderEnabled = value);
-                        _saveSetting('reminders_logging', value);
-                      },
+                        onChanged: (bool value) async {
+                          setState(() => _loggingReminderEnabled = value);
+                          await _saveSetting('reminders_logging', value);
+
+                          await _rescheduleNotifications();
+                        }
                     ),
                   ],
                 ),
