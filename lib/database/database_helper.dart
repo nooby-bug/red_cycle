@@ -16,6 +16,19 @@ class DatabaseHelper {
     return _database!;
   }
 
+  Future<int> insertFullPeriod(DateTime start, DateTime end) async {
+    final db = await instance.database;
+
+    return await db.insert(
+      'period_entries',
+      {
+        'start_date': start.toIso8601String(),
+        'end_date': end.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
@@ -41,39 +54,6 @@ class DatabaseHelper {
   // CRUD OPERATIONS
   // ---------------------------------------------------------------------------
 
-  /// Inserts a new period start date into the database. (end_date is null initially)
-  Future<int> insertPeriod(DateTime date) async {
-    try {
-      final db = await instance.database;
-      final entry = PeriodEntry(startDate: date);
-
-      return await db.insert(
-        'period_entries',
-        entry.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    } catch (e) {
-      throw Exception('Failed to insert period: $e');
-    }
-  }
-
-  /// Updates an active period entry by setting its end date.
-  Future<void> endPeriod(int id, DateTime endDate) async {
-    try {
-      final db = await instance.database;
-
-      await db.update(
-        'period_entries',
-        {
-          'end_date': endDate.toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-    } catch (e) {
-      throw Exception('Failed to update period end date: $e');
-    }
-  }
 
   /// Fetches all periods sorted by the most recent start date (DESC).
   Future<List<PeriodEntry>> getAllPeriods() async {
@@ -89,6 +69,36 @@ class DatabaseHelper {
     } catch (e) {
       throw Exception('Failed to fetch periods: $e');
     }
+  }
+
+  Future<int> insertPeriod(DateTime date) async {
+    // fallback: treat as 1-day period
+    return await insertFullPeriod(date, date);
+  }
+
+  Future<void> endPeriod(int id, DateTime endDate) async {
+    final db = await database;
+
+    final result = await db.query(
+      'period_entries',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (result.isEmpty) return;
+
+    final entry = PeriodEntry.fromMap(result.first);
+
+    // Replace with full period update
+    await db.update(
+      'period_entries',
+      {
+        'start_date': entry.startDate.toIso8601String(),
+        'end_date': endDate.toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   /// Deletes a specific period entry by its ID.

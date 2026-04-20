@@ -1,16 +1,8 @@
-///TODO ADD ANIMATIONS LIKE TAP TO RESPONSE
-library;
-
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../../utils/user_preferences.dart';
-import '../../database/database_helper.dart';
 import 'package:red/models/period_entry.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:red/services/notification_service.dart';
-import 'package:red/services/prediction_service.dart';
 import 'package:red/models/prediction_data.dart';
 
 enum DayType {
@@ -23,10 +15,20 @@ enum DayType {
 
 class CalendarMonthView extends StatefulWidget {
   final DateTime month;
+  final List<PeriodEntry> periods;
+  final PredictionData? prediction;
+  final int periodLength;
+  final void Function(DateTime start, DateTime end)? onLogPeriod;
+  final void Function(PeriodEntry entry)? onDeletePeriod;
 
   const CalendarMonthView({
     super.key,
     required this.month,
+    required this.periods,
+    required this.prediction,
+    this.periodLength = 5, // Default length for predicted periods
+    this.onLogPeriod,
+    this.onDeletePeriod,
   });
 
   @override
@@ -34,81 +36,16 @@ class CalendarMonthView extends StatefulWidget {
 }
 
 class _CalendarMonthViewState extends State<CalendarMonthView> {
-  // ------------------ STATE ------------------
-
-  int _cycleLength = 28;
-  int _periodLength = 5;
-  List<PeriodEntry> _periods = [];
-  PredictionData? _cachedPrediction;
-
-  final PredictionService _predictionService = PredictionService();
   static final _monthFormat = DateFormat.yMMMM();
 
-  // ------------------ INIT & DATA LOADING ------------------
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeData();
-  }
-
-  Future<void> _initializeData() async {
-    final cycle = await UserPreferences.getCycleLength() ?? 28;
-    final period = await UserPreferences.getPeriodLength() ?? 5;
-    final periods = await DatabaseHelper.instance.getAllPeriods();
-
-    if (!mounted) return;
-
-    setState(() {
-      _cycleLength = cycle;
-      _periodLength = period;
-      _periods = periods..sort((a, b) => b.startDate.compareTo(a.startDate));
-    });
-
-    _updatePredictionCache();
-  }
-
-  Future<void> _reloadSettingsAndRecalculate() async {
-    final cycle = await UserPreferences.getCycleLength() ?? 28;
-    final period = await UserPreferences.getPeriodLength() ?? 5;
-
-    if (!mounted) return;
-
-    setState(() {
-      _cycleLength = cycle;
-      _periodLength = period;
-    });
-
-    _updatePredictionCache();
-  }
-
-  Future<void> _loadPeriods() async {
-    final periods = await DatabaseHelper.instance.getAllPeriods();
-
-    if (!mounted) return;
-
-    setState(() {
-      _periods = periods..sort((a, b) => b.startDate.compareTo(a.startDate));
-      _updatePredictionCache();
-    });
-  }
-
-  void _updatePredictionCache() {
-    if (_periods.length < 2) {
-      _cachedPrediction = null;
-      return;
-    }
-
-    // Calculate prediction ONCE based on today's actual date
-    _cachedPrediction = _predictionService.getPredictionData(
-      periodEntries: _periods,
-      cycleLength: _cycleLength,
-      today: _periods.first.startDate,
-    );
-  }
+  // ------------------ UTILITIES ------------------
 
   DateTime _normalize(DateTime date) {
     return DateTime(date.year, date.month, date.day);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   // ------------------ DAY TYPE LOGIC ------------------
@@ -117,7 +54,7 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
     final current = _normalize(day);
 
     // 1. Check Actual Period (Highest Priority)
-    for (final entry in _periods) {
+    for (final entry in widget.periods) {
       final start = _normalize(entry.startDate);
       final end = _normalize(entry.endDate ?? entry.startDate);
 
@@ -126,34 +63,30 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
       }
     }
 
-    if (_cachedPrediction == null) return DayType.none;
+    // If not enough data or no prediction, return none
+    if (widget.periods.length < 2 || widget.prediction == null) {
+      return DayType.none;
+    }
 
-    // 2. Check Predicted Period
-    final predStart = _normalize(_cachedPrediction!.nextPeriod);
-    final predEnd = predStart.add(Duration(days: _periodLength - 1));
+    final pred = widget.prediction!;
 
-    bool overlapsActual = _periods.any((entry) {
-      final start = _normalize(entry.startDate);
-      final end = _normalize(entry.endDate ?? entry.startDate);
+    // 2. Check Predicted Period (nextPeriod -> nextPeriod + periodLength - 1)
+    final predStart = _normalize(pred.nextPeriod);
+    final predEnd = predStart.add(Duration(days: widget.periodLength - 1));
 
-      return !(end.isBefore(predStart) || start.isAfter(predEnd));
-    });
-
-    if (!overlapsActual &&
-        !current.isBefore(predStart) &&
-        !current.isAfter(predEnd)) {
+    if (!current.isBefore(predStart) && !current.isAfter(predEnd)) {
       return DayType.predictedPeriod;
     }
 
     // 3. Check Ovulation
-    final ovulation = _normalize(_cachedPrediction!.ovulation);
+    final ovulation = _normalize(pred.ovulation);
     if (current.isAtSameMomentAs(ovulation)) {
       return DayType.ovulation;
     }
 
-    // 4. Check Fertile Window
-    final fertileStart = _normalize(_cachedPrediction!.fertileStart);
-    final fertileEnd = _normalize(_cachedPrediction!.fertileEnd);
+    // 4. Check Fertile Window (Inclusive range check)
+    final fertileStart = _normalize(pred.fertileStart);
+    final fertileEnd = _normalize(pred.fertileEnd);
 
     if (!current.isBefore(fertileStart) && !current.isAfter(fertileEnd)) {
       return DayType.fertile;
@@ -169,12 +102,17 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // Generate a unique key based on the data so TableCalendar rebuilds when data changes
+    final String dataHash = widget.periods
+        .map((e) => "${e.startDate.toIso8601String()}_${e.endDate?.toIso8601String()}")
+        .join('|') +
+        (widget.prediction?.nextPeriod.toIso8601String() ?? '');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 16),
-
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
@@ -186,9 +124,7 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
             ),
           ),
         ),
-
         const SizedBox(height: 12),
-
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: TableCalendar(
@@ -197,7 +133,6 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
             focusedDay: widget.month,
             rowHeight: 48,
             daysOfWeekHeight: 24,
-
             daysOfWeekStyle: const DaysOfWeekStyle(
               weekdayStyle: TextStyle(
                 fontSize: 12,
@@ -210,24 +145,19 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-
             calendarStyle: const CalendarStyle(
               cellMargin: EdgeInsets.symmetric(vertical: 6),
               outsideDaysVisible: false,
             ),
-
             headerVisible: false,
             calendarFormat: CalendarFormat.month,
             availableGestures: AvailableGestures.none,
-
             onDaySelected: (selectedDay, focusedDay) {
               _showDayDetails(context, selectedDay);
             },
-
             onDayLongPressed: (selectedDay, focusedDay) {
               _showAddPeriodSheet(context, selectedDay);
             },
-
             calendarBuilders: CalendarBuilders(
               defaultBuilder: (context, day, focusedDay) =>
                   _buildDayCell(context, day),
@@ -236,7 +166,6 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
             ),
           ),
         ),
-
         const SizedBox(height: 16),
       ],
     );
@@ -267,8 +196,8 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
 
     int? cycleDay;
 
-    if (_periods.isNotEmpty) {
-      final latestStart = _periods
+    if (widget.periods.isNotEmpty) {
+      final latestStart = widget.periods
           .map((e) => e.startDate)
           .reduce((a, b) => a.isAfter(b) ? a : b);
 
@@ -332,7 +261,8 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
       }) {
     PeriodEntry? existing;
 
-    for (final entry in _periods) {
+    // Find if the selected day belongs to an existing period
+    for (final entry in widget.periods) {
       final start = _normalize(entry.startDate);
       final end = _normalize(entry.endDate ?? entry.startDate);
       final target = _normalize(selectedDay);
@@ -356,7 +286,7 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
       endDate = editingEntry.endDate ?? editingEntry.startDate;
     } else {
       startDate = selectedDay;
-      endDate = selectedDay.add(const Duration(days: 4));
+      endDate = selectedDay.add(Duration(days: widget.periodLength - 1));
     }
 
     showModalBottomSheet(
@@ -381,9 +311,7 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
                   // Start Date
                   ListTile(
                     title: const Text("Start Date"),
@@ -403,7 +331,6 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                       }
                     },
                   ),
-
                   // End Date
                   ListTile(
                     title: const Text("End Date"),
@@ -423,70 +350,15 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                       }
                     },
                   ),
-
                   const SizedBox(height: 20),
-
-                  // Save Logic
+                  // Save Button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () async {
-                        final navigator = Navigator.of(context);
-
-                        DateTime newStart = startDate;
-                        DateTime newEnd = endDate;
-                        List<PeriodEntry> toRemove = [];
-
-                        // Find overlapping periods
-                        for (final entry in _periods) {
-                          final existingStart = entry.startDate;
-                          final existingEnd = entry.endDate ?? existingStart;
-
-                          final overlaps = !(newEnd.isBefore(existingStart) || newStart.isAfter(existingEnd));
-
-                          if (overlaps) {
-                            if (existingStart.isBefore(newStart)) {
-                              newStart = existingStart;
-                            }
-                            if (existingEnd.isAfter(newEnd)) {
-                              newEnd = existingEnd;
-                            }
-                            toRemove.add(entry);
-                          }
-                        }
-
-                        // Remove overlapping entries
-                        for (final entry in toRemove) {
-                          if (entry.id != null) {
-                            await DatabaseHelper.instance.deletePeriod(entry.id!);
-                          }
-                        }
-
-                        // Insert merged period
-                        final id = await DatabaseHelper.instance.insertPeriod(newStart);
-                        await DatabaseHelper.instance.endPeriod(id, newEnd);
-
-                        // Refresh local UI data and prediction cache
-                        await _loadPeriods();
-                        final updatedHistory = _periods;
-                        final prefs = await SharedPreferences.getInstance();
-
-                        final hour = prefs.getInt('reminders_time_hour') ?? 8;
-                        final minute = prefs.getInt('reminders_time_minute') ?? 0;
-
-                        final periodEnabled = prefs.getBool('reminders_period') ?? false;
-                        final loggingEnabled = prefs.getBool('reminders_logging') ?? false;
-
-                        await NotificationService.instance.refreshAllReminders(
-                          history: updatedHistory,
-                          hour: hour,
-                          minute: minute,
-                          periodEnabled: periodEnabled,
-                          loggingEnabled: loggingEnabled,
-                        );
-
-                        if (!mounted) return;
-                        navigator.pop();
+                      onPressed: () {
+                        // Delegate database and logic responsibilities to parent
+                        widget.onLogPeriod?.call(startDate, endDate);
+                        Navigator.pop(context);
                       },
                       child: const Text("Save Period"),
                     ),
@@ -515,12 +387,10 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // EDIT
               ListTile(
                 leading: const Icon(Icons.edit),
                 title: const Text("Edit Period"),
                 onTap: () {
-                  if (!mounted) return;
                   Navigator.pop(context);
                   _showAddPeriodSheet(
                     context,
@@ -530,32 +400,13 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
                   );
                 },
               ),
-
-              // DELETE
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title: const Text("Delete Period"),
-                onTap: () async {
-                  final navigator = Navigator.of(context);
-
-                  if (entry.id != null) {
-                    await DatabaseHelper.instance.deletePeriod(entry.id!);
-                    await _loadPeriods(); // Refreshes UI and cache
-
-                    final updatedHistory = _periods;
-                    final prefs = await SharedPreferences.getInstance();
-
-                    await NotificationService.instance.refreshAllReminders(
-                      history: updatedHistory,
-                      hour: prefs.getInt('reminders_time_hour') ?? 8,
-                      minute: prefs.getInt('reminders_time_minute') ?? 0,
-                      periodEnabled: prefs.getBool('reminders_period') ?? false,
-                      loggingEnabled: prefs.getBool('reminders_logging') ?? false,
-                    );
-                  }
-
-                  if (!mounted) return;
-                  navigator.pop();
+                onTap: () {
+                  // Delegate database and logic responsibilities to parent
+                  widget.onDeletePeriod?.call(entry);
+                  Navigator.pop(context);
                 },
               ),
             ],
@@ -582,7 +433,7 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
 
   Widget _buildDayCell(BuildContext context, DateTime day) {
     final type = _getDayType(day);
-    final isToday = isSameDay(day, DateTime.now());
+    final isToday = _isSameDay(day, DateTime.now());
 
     const pink = Color(0xFFF48FB1);
     const blue = Color(0xFFB3D9FF);
