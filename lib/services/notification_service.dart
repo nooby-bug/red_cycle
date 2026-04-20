@@ -5,26 +5,16 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:red/models/period_entry.dart';
+import 'package:red/services/prediction_service.dart';
+import 'package:red/models/prediction_data.dart';
+import 'package:red/utils/user_preferences.dart';
 
-
-// Internal helper model for prediction data
-class _PredictionData {
-  final DateTime nextPeriod;
-  final DateTime ovulation;
-  final DateTime fertileStart;
-  final DateTime fertileEnd;
-
-  _PredictionData({
-    required this.nextPeriod,
-    required this.ovulation,
-    required this.fertileStart,
-    required this.fertileEnd,
-  });
-}
 
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
+
+  final PredictionService _predictionService = PredictionService();
 
   // --- Notification IDs ---
   static const int _dailyNotificationId = 1001;
@@ -199,15 +189,17 @@ class NotificationService {
     }
 
 // 3. Calculate predictions
-    final int avgCycleLength = _calculateAverageCycleLength(history);
 
-    final latest = history
-        .map((e) => e.startDate)
-        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final userCycleLength =
+        await UserPreferences.getCycleLength() ?? 28;
 
-    final predictions = _calculatePredictions(latest, avgCycleLength);
+    final prediction = _predictionService.getPredictionData(
+      periodEntries: history,
+      cycleLength: userCycleLength,
+      today: DateTime.now(),
+    );
 
-    final upcomingEvents = _getUpcomingEvents(predictions);
+    final upcomingEvents = _getUpcomingEvents(prediction);
 
 // 4. Schedule each event
     for (final event in upcomingEvents) {
@@ -224,69 +216,32 @@ class NotificationService {
   // CYCLE PREDICTION HELPERS
   // ---------------------------------------------------------------------------
 
-  /// Calculates the average cycle length from the last 6 cycles.
-  int _calculateAverageCycleLength(List<PeriodEntry> history) {
-    if (history.length < 2) {
-      debugPrint("⚠️ Not enough data for prediction");
-      return 28;
-    }
-    final sorted = List<PeriodEntry>.from(history)..sort((a, b) => a.startDate.compareTo(b.startDate));
-    final recent = sorted.length > 6 ? sorted.sublist(sorted.length - 6) : sorted;
-
-    List<int> lengths = [];
-    for (int i = 0; i < recent.length - 1; i++) {
-      final diff = recent[i + 1].startDate.difference(recent[i].startDate).inDays;
-      lengths.add(diff);
-    }
-
-    if (lengths.isEmpty) return 28;
-
-    final avg = lengths.reduce((a, b) => a + b) / lengths.length;
-    final avgRounded = avg.round();
-    debugPrint("CYCLE AVG: $avgRounded days (from ${lengths.length} cycles)");
-    return avgRounded;
-  }
-
   /// Predicts key cycle dates based on the last period start.
-  _PredictionData _calculatePredictions(DateTime lastStartDate, int avgCycleLength) {
-    final nextPeriod = lastStartDate.add(Duration(days: avgCycleLength));
-    final ovulation = nextPeriod.subtract(const Duration(days: 14));
-    final fertileStart = ovulation.subtract(const Duration(days: 2));
-    final fertileEnd = ovulation.add(const Duration(days: 2));
 
-    debugPrint("NEXT PERIOD: ${nextPeriod.toIso8601String()}");
-    debugPrint("OVULATION: ${ovulation.toIso8601String()}");
-
-    return _PredictionData(
-        nextPeriod: nextPeriod,
-        ovulation: ovulation,
-        fertileStart: fertileStart,
-        fertileEnd: fertileEnd);
-  }
 
   /// Gathers and filters all potential reminder events for the next 7 days.
-  List<Map<String, dynamic>> _getUpcomingEvents(_PredictionData predictions) {
+  List<Map<String, dynamic>> _getUpcomingEvents(PredictionData prediction) {
     final now = tz.TZDateTime.now(tz.local);
     final sevenDaysFromNow = now.add(const Duration(days: 7));
 
     final Map<int, Map<String, dynamic>> events = {
       _periodUpcomingId: {
-        'date': predictions.nextPeriod.subtract(const Duration(days: 2)),
+        'date': prediction.nextPeriod.subtract(const Duration(days: 2)),
         'title': '🩸 Period Coming Soon',
         'body': 'Your next period is predicted in 2 days.',
       },
       _periodStartId: {
-        'date': predictions.nextPeriod,
+        'date': prediction.nextPeriod,
         'title': '🩸 Period May Start Today',
         'body': 'Your period is predicted today.',
       },
       _ovulationId: {
-        'date': predictions.ovulation,
+        'date': prediction.ovulation,
         'title': '🌸 Ovulation Day',
         'body': 'Today is your ovulation day.',
       },
       _fertileWindowId: {
-        'date': predictions.fertileStart,
+        'date': prediction.fertileStart,
         'title': '🌸 Fertile Window',
         'body': 'Fertile window begins today.',
       },

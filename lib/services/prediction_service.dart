@@ -21,10 +21,52 @@
 // Do NOT implement until base system is fully stable.
 // ---------------------------------------------------------------------------
 
+import 'dart:math';
+import 'package:flutter/foundation.dart';
 import '../models/hero_state.dart';
 import '../models/period_entry.dart';
+import 'package:red/models/prediction_data.dart';
 
 class PredictionService {
+
+  PredictionData getPredictionData({
+    required List<PeriodEntry> periodEntries,
+    required int cycleLength,
+    required DateTime today,
+  }) {
+    if (periodEntries.length < 2) {
+      return PredictionData.empty();
+    }
+
+    final sorted = List<PeriodEntry>.from(periodEntries)
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+
+    final latestStart = _normalize(sorted.first.startDate);
+
+    int effectiveCycleLength = cycleLength;
+
+    if (periodEntries.length >= 3) {
+      final result = _calculateSmartCycle(periodEntries);
+      if (result.avg > 10) {
+        effectiveCycleLength = result.avg.round();
+      }
+    }
+
+    final nextPeriod =
+    latestStart.add(Duration(days: effectiveCycleLength));
+
+    final ovulation = nextPeriod.subtract(const Duration(days: 14));
+    final fertileStart = ovulation.subtract(const Duration(days: 2));
+    final fertileEnd = ovulation.add(const Duration(days: 2));
+
+    return PredictionData(
+      nextPeriod: nextPeriod,
+      ovulation: ovulation,
+      fertileStart: fertileStart,
+      fertileEnd: fertileEnd,
+    );
+  }
+
   HeroState getHeroState({
     required List<PeriodEntry> periodEntries,
     required int cycleLength,
@@ -46,27 +88,29 @@ class PredictionService {
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
 
     final PeriodEntry latestEntry = sortedEntries.first;
-
     final DateTime latestStart = _normalize(latestEntry.startDate);
 
     // ------------------------------------------------------------
-    // SMART CYCLE LENGTH (AUTO / FALLBACK)
+    // 🔥 SMART CYCLE LENGTH
     // ------------------------------------------------------------
     int effectiveCycleLength = cycleLength;
 
     if (periodEntries.length >= 3) {
-      final avg = calculateAverageCycleLength(periodEntries);
+      final result = _calculateSmartCycle(periodEntries);
 
-      if (avg > 10) {
-        effectiveCycleLength = avg.round();
+      if (result.avg > 10)   {
+        effectiveCycleLength = result.avg.round();
       }
+
+      debugPrint("📈 SMART AVG: ${result.avg}");
+      debugPrint("🎯 CONFIDENCE: ${(result.confidence * 100).toStringAsFixed(1)}%");
     }
 
     final int cycleDay =
         normalizedToday.difference(latestStart).inDays + 1;
 
     // ------------------------------------------------------------------
-    // ✅ ACTIVE PERIOD (ONGOING)
+    // ACTIVE PERIOD
     // ------------------------------------------------------------------
     if (latestEntry.endDate == null &&
         !normalizedToday.isBefore(latestStart)) {
@@ -83,9 +127,6 @@ class PredictionService {
 
     final DateTime latestEnd = _normalize(latestEntry.endDate!);
 
-    // ------------------------------------------------------------------
-    // ✅ COMPLETED PERIOD (STRICT RANGE CHECK)
-    // ------------------------------------------------------------------
     if (!normalizedToday.isBefore(latestStart) &&
         !normalizedToday.isAfter(latestEnd)) {
       final int periodDay =
@@ -106,7 +147,6 @@ class PredictionService {
     final DateTime nextPeriodDate =
     latestStart.add(Duration(days: effectiveCycleLength));
 
-    // ✅ Late only AFTER expected date
     if (normalizedToday.isAfter(nextPeriodDate)) {
       final int daysLate =
           normalizedToday.difference(nextPeriodDate).inDays;
@@ -124,7 +164,6 @@ class PredictionService {
 
     final int ovulationDay = effectiveCycleLength - 14;
 
-    // ✅ FIXED fertile window
     final int fertileStart = ovulationDay - 3;
     final int fertileEnd = ovulationDay + 1;
 
@@ -147,38 +186,87 @@ class PredictionService {
   }
 
   // --------------------------------------------------------------------------
+  // 🔥 SMART CYCLE ENGINE
+  // --------------------------------------------------------------------------
+
+  _SmartResult _calculateSmartCycle(List<PeriodEntry> periods) {
+    final sorted = List<PeriodEntry>.from(periods)
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    List<int> lengths = [];
+
+    for (int i = 0; i < sorted.length - 1; i++) {
+      final int diff = _normalize(sorted[i + 1].startDate)
+          .difference(_normalize(sorted[i].startDate))
+          .inDays;
+
+      // 🔥 OUTLIER FILTER
+      if (diff >= 21 && diff <= 45) {
+        lengths.add(diff);
+      } else {
+        debugPrint("⛔ Ignored outlier: $diff days");
+      }
+    }
+
+    if (lengths.isEmpty) {
+      return _SmartResult(avg: 28, confidence: 0.3);
+    }
+
+    // 🔥 WEIGHTED AVERAGE
+    double weightedSum = 0;
+    double totalWeight = 0;
+
+    for (int i = 0; i < lengths.length; i++) {
+      final weight = i + 1; // recent = higher weight
+      weightedSum += lengths[i] * weight;
+      totalWeight += weight;
+    }
+
+    final avg = weightedSum / totalWeight;
+
+    final confidence = _calculateConfidence(lengths);
+
+    return _SmartResult(avg: avg, confidence: confidence);
+  }
+
+  double _calculateConfidence(List<int> lengths) {
+    if (lengths.length < 2) return 0.3;
+
+    final mean = lengths.reduce((a, b) => a + b) / lengths.length;
+
+    double variance = 0;
+    for (final l in lengths) {
+      variance += pow(l - mean, 2);
+    }
+
+    variance /= lengths.length;
+
+    final stdDev = sqrt(variance);
+
+    final confidence = (1 / (1 + stdDev)).clamp(0.0, 1.0);
+
+    return confidence;
+  }
+
+  // --------------------------------------------------------------------------
   // UTILITIES
   // --------------------------------------------------------------------------
 
-  /// Strips the time from a DateTime to ensure flawless day-to-day comparisons.
   DateTime _normalize(DateTime date) {
     return DateTime(date.year, date.month, date.day);
   }
+}
 
-  /// Calculates average cycle length using historical period data
-  double calculateAverageCycleLength(List<PeriodEntry> periods) {
-    if (periods.length < 2) {
-      return 0.0;
-    }
+// --------------------------------------------------------------------------
+// HELPER CLASS
+// --------------------------------------------------------------------------
 
-    final sortedPeriods = List<PeriodEntry>.from(periods)
-      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+class _SmartResult {
+  final double avg;
+  final double confidence;
 
-    final List<int> cycleLengths = [];
-
-    for (int i = 0; i < sortedPeriods.length - 1; i++) {
-      final DateTime day1 = _normalize(sortedPeriods[i].startDate);
-      final DateTime day2 = _normalize(sortedPeriods[i + 1].startDate);
-
-      final int length = day2.difference(day1).inDays;
-      cycleLengths.add(length);
-    }
-
-    if (cycleLengths.isEmpty) {
-      return 0.0;
-    }
-
-    final int sum = cycleLengths.reduce((a, b) => a + b);
-    return sum / cycleLengths.length;
-  }
+  _SmartResult({
+    required this.avg,
+    required this.confidence,
+  });
 }

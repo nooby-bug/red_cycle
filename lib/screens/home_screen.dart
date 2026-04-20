@@ -25,6 +25,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _cycleLength = 28;
   int _periodLength = 5;
 
+  final PredictionService _predictionService = PredictionService();
+
   void _handleReturnFromSettings() {
     _loadSettings();
     _loadPeriods(); // ✅ FIX: refresh data when returning
@@ -131,49 +133,42 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
 
-    String nextPeriodStr = "--";
-    String ovulationStr = "--";
-    String fertileStr = "--";
-
-    if (_periodEntries.isNotEmpty) {
-      final latestStart = _periodEntries.first.startDate;
-
-      final nextPeriod =
-      latestStart.add(Duration(days: _cycleLength));
-
-      final ovulationDay = _cycleLength - 14;
-      final ovulationDate =
-      latestStart.add(Duration(days: ovulationDay - 1));
-
-      final fertileStart =
-      ovulationDate.subtract(const Duration(days: 3));
-      final fertileEnd =
-      ovulationDate.add(const Duration(days: 1));
-
-      nextPeriodStr = _formatDate(nextPeriod);
-      ovulationStr = _formatDate(ovulationDate);
-      fertileStr = _formatRange(fertileStart, fertileEnd);
-    }
-
     final bool isPeriodActive =
     _periodEntries.any((entry) => entry.endDate == null);
 
-    final predictionService = PredictionService();
+// ✅ USE class-level instance
+    final prediction = _predictionService.getPredictionData(
+      periodEntries: _periodEntries,
+      cycleLength: _cycleLength,
+      today: _today,
+    );
 
-    final heroState = predictionService.getHeroState(
+    final heroState = _predictionService.getHeroState(
       periodEntries: _periodEntries,
       cycleLength: _cycleLength,
       defaultPeriodLength: _periodLength,
       today: _today,
     );
 
+    String nextPeriodStr = "--";
+    String ovulationStr = "--";
+    String fertileStr = "--";
+
+    if (_periodEntries.length >= 2) {
+      nextPeriodStr = _formatDate(prediction.nextPeriod);
+      ovulationStr = _formatDate(prediction.ovulation);
+      fertileStr = _formatRange(
+        prediction.fertileStart,
+        prediction.fertileEnd,
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -193,6 +188,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
 
                 const SizedBox(height: 32),
+
                 const DateStrip(),
 
                 const SizedBox(height: 32),
