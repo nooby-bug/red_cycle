@@ -334,121 +334,170 @@ class _CycleTrendCard extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          cycleLengths.length < 2
-              ? const SizedBox(
-            height: 150,
-            child: Center(
-              child: Text(
-                "Not enough data for trend.",
-                style: TextStyle(color: Colors.grey),
-              ),
+        cycleLengths.length < 2
+            ? const SizedBox(
+          height: 150,
+          child: Center(
+            child: Text(
+              "Not enough data for trend.",
+              style: TextStyle(color: Colors.grey),
             ),
-          )
-              : SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: (cycleLengths.length * 50)
-                  .clamp(300, double.infinity)
-                  .toDouble(),
-              height: 300,
-              child: LineChart(
-              LineChartData(
-                clipData: FlClipData.none(),
-                minY: minY,
-                maxY: maxY +1,
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: Colors.grey.withValues(alpha: 0.08),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    preventCurveOverShooting: true,
-                    color: const Color(0xFFF48FB1),
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (spot, percent, barData, index) {
-                        return FlDotCirclePainter(
-                          radius: 4,
-                          color: const Color(0xFFF48FB1),
-                          strokeWidth: 0,
-                        );
-                      },
+          ),
+        )
+            : SizedBox(
+          height: 260,
+          child: Row(
+            children: [
+
+              // 🔵 FIXED Y-AXIS
+              SizedBox(
+                width: 40,
+                child: LineChart(
+                  LineChartData(
+                    minY: (minY - step).clamp(0, double.infinity),
+                    maxY: maxY + step,
+                    gridData: FlGridData(show: false),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [],
+
+                    titlesData: FlTitlesData(
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: step,
+                          reservedSize: 40,
+                          getTitlesWidget: (value, meta) {
+                            return Text(
+                              value.toInt().toString(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      bottomTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
                     ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFFF48FB1).withValues(alpha: 0.3),
-                          const Color(0xFFF48FB1).withValues(alpha: 0.0),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+
+              // 🔴 SCROLLABLE GRAPH
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: (cycleLengths.length * 80)
+                        .clamp(320, double.infinity)
+                        .toDouble(),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8, right: 12),
+                      child: LineChart(
+                        LineChartData(
+                          clipData: FlClipData.none(),
+                          minY: (minY - step).clamp(0, double.infinity),
+                          maxY: maxY + step,
+                          baselineY: minY,
+
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            getDrawingHorizontalLine: (value) {
+                              return FlLine(
+                                color: Colors.grey.withValues(alpha: 0.08),
+                                strokeWidth: 1,
+                              );
+                            },
+                          ),
+
+                          borderData: FlBorderData(show: false),
+
+                          lineBarsData: [
+                            LineChartBarData(
+                              spots: spots,
+                              isCurved: true,
+                              color: const Color(0xFFF48FB1),
+                              barWidth: 3,
+                              isStrokeCapRound: true,
+                              dotData: FlDotData(
+                                show: true,
+                                getDotPainter: (spot, percent, barData, index) {
+                                  return FlDotCirclePainter(
+                                    radius: 4,
+                                    color: const Color(0xFFF48FB1),
+                                    strokeWidth: 0,
+                                  );
+                                },
+                              ),
+                              belowBarData: BarAreaData(
+                                show: true,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    const Color(0xFFF48FB1)
+                                        .withValues(alpha: 0.3),
+                                    const Color(0xFFF48FB1)
+                                        .withValues(alpha: 0.0),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          titlesData: FlTitlesData(
+                            leftTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+
+                            rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false)),
+                            topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false)),
+
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                interval: 1,
+                                reservedSize: 28,
+                                getTitlesWidget: (value, meta) {
+                                  if (value % 1 != 0) return const SizedBox();
+
+                                  final index = value.toInt();
+                                  if (index < 0 ||
+                                      index >= cycleLengths.length) {
+                                    return const SizedBox();
+                                  }
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      'C${index + 1}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ],
-                titlesData: FlTitlesData(
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                        interval: step,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 1,
-                      reservedSize: 28,
-                      getTitlesWidget: (value, meta) {
-                        if (value % 1 != 0) return const SizedBox();
-
-                        final index = value.toInt();
-
-                        if (index < 0 || index >= cycleLengths.length) {
-                          return const SizedBox();
-                        }
-
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            'C${index + 1}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
                 ),
               ),
-            ),
+            ],
           ),
-          ),
+        )
         ],
       ),
     );
@@ -546,84 +595,154 @@ class _PeriodTrendCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-
           SizedBox(
-            height: 300,
-            child: LineChart(
-              LineChartData(
-                clipData: FlClipData.none(),
-                minY: minY - 1,
-                maxY: maxY + step,
-
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: Colors.grey.withValues(alpha: 0.1),
-                      strokeWidth: 1,
-                    );
-                  },
+            height: 260,
+            child: Row(
+              children: [
+                // 🔵 FIXED Y AXIS (does NOT scroll)
+                SizedBox(
+                  width: 40,
+                  child: LineChart(
+                    LineChartData(
+                      minY: minY.clamp(0, double.infinity),
+                      maxY: maxY + step,
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: step,
+                            reservedSize: 40,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                value.toInt().toString(),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        bottomTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      gridData: FlGridData(show: false),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: const [],
+                    ),
+                  ),
                 ),
-                borderData: FlBorderData(show: false),
 
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    color: const Color(0xFFF48FB1),
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: const FlDotData(show: true),
+                // 🔴 SCROLLABLE GRAPH
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: (periodLengths.length * 80)
+                          .clamp(320, double.infinity)
+                          .toDouble(),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8, right: 12),
+                        child: LineChart(
+                          LineChartData(
+                            clipData: FlClipData.none(),
+                            minY: minY.clamp(0, double.infinity),
+                            maxY: maxY + step,
+                            baselineY: minY,
 
-                    // 👇 ADD THIS (gradient fill)
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFFF48FB1).withValues(alpha: 0.3),
-                          const Color(0xFFF48FB1).withValues(alpha: 0.0),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                            gridData: FlGridData(
+                              show: true,
+                              drawVerticalLine: false,
+                              getDrawingHorizontalLine: (value) {
+                                return FlLine(
+                                  color: Colors.grey.withValues(alpha: 0.1),
+                                  strokeWidth: 1,
+                                );
+                              },
+                            ),
+
+                            borderData: FlBorderData(show: false),
+
+                            lineBarsData: [
+                              LineChartBarData(
+                                spots: spots,
+                                isCurved: periodLengths.length > 3,
+                                color: const Color(0xFFF48FB1),
+                                barWidth: 3,
+                                isStrokeCapRound: true,
+                                dotData: const FlDotData(show: true),
+                                belowBarData: BarAreaData(
+                                  show: true,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      const Color(0xFFF48FB1)
+                                          .withValues(alpha: 0.3),
+                                      const Color(0xFFF48FB1)
+                                          .withValues(alpha: 0.0),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                ),
+                              ),
+                            ],
+
+                            titlesData: FlTitlesData(
+                              // ❌ hide left axis here (already shown separately)
+                              leftTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  interval: 1,
+                                  reservedSize: 28,
+                                  getTitlesWidget: (value, meta) {
+                                    if (value % 1 != 0) return const SizedBox();
+
+                                    final index = value.toInt();
+                                    if (index < 0 || index >= periodLengths.length) {
+                                      return const SizedBox();
+                                    }
+
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Text(
+                                        'P${index + 1}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ],
-
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: step,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          "P${value.toInt() + 1}",
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
                 ),
-              ),
+              ],
             ),
-          ),
+          )
         ],
       ),
     );
