@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../database/database_helper.dart';
 import '../models/period_entry.dart';
-import '../models/hero_state.dart';
 import 'package:red/services/prediction_service.dart';
 import '../widgets/home/cycle_hero_card.dart';
 import '../widgets/home/date_strip.dart';
 import '../widgets/home/prediction_summary.dart';
 import '../widgets/home/top_bar.dart';
 import '../utils/user_preferences.dart';
+import 'dart:math';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,11 +25,65 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _cycleLength = 28;
   int _periodLength = 5;
 
+  String _userName = "there";
+  String _currentGreeting = "";
+
   final PredictionService _predictionService = PredictionService();
 
   void _handleReturnFromSettings() {
     _loadSettings();
-    _loadPeriods(); // ✅ FIX: refresh data when returning
+    _loadPeriods();
+    _loadUserName();
+    _generateGreeting();
+  }
+
+  void _generateGreeting() {
+    final random = Random();
+
+    final hour = DateTime.now().hour;
+
+    String timeGreeting;
+    if (hour < 12) {
+      timeGreeting = "Good morning 🌅";
+    } else if (hour < 18) {
+      timeGreeting = "Good afternoon ☀️";
+    } else {
+      timeGreeting = "Good evening 🌙";
+    }
+
+    final phase = _predictionService.getCurrentPhase(
+      periodEntries: _periodEntries,
+      cycleLength: _cycleLength,
+      today: _today,
+    );
+
+    final Map<String, List<String>> messages = {
+      "period": [
+        "Take it slow today 💗",
+        "Rest is productive too 🌿",
+        "Your body is doing important work 🌸",
+      ],
+      "follicular": [
+        "Fresh start energy ✨",
+        "Try something new today 🌱",
+        "Great day to begin something 💫",
+      ],
+      "ovulation": [
+        "You're glowing today 🌸",
+        "Speak your mind confidently 💫",
+        "Your energy is at its peak 🔥",
+      ],
+      "luteal": [
+        "Be kind to yourself 🤍",
+        "Slow down and reflect 🌙",
+        "Take things gently today 🌼",
+      ],
+    };
+
+    final list = messages[phase] ?? ["Take care today 💛"];
+    final message = list[random.nextInt(list.length)];
+
+    _currentGreeting = "$timeGreeting\n$message";
   }
 
   @override
@@ -38,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadPeriods();
     _loadSettings();
+    _loadUserName();
   }
 
   @override
@@ -73,6 +128,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return "${start.day}–${end.day} ${_monthName(end.month)}";
   }
 
+  Future<void> _loadUserName() async {
+    final name = await UserPreferences.getName();
+
+    if (!mounted) return;
+
+    setState(() {
+      _userName = name;
+    });
+    _generateGreeting(); // ✅ ADD THIS
+  }
+
   Future<void> _loadSettings() async {
     final cycle = await UserPreferences.getCycleLength();
     final period = await UserPreferences.getPeriodLength();
@@ -80,8 +146,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     setState(() {
-      _cycleLength = cycle ?? 28;
-      _periodLength = period ?? 5;
+      _cycleLength = cycle;
+      _periodLength = period;
     });
   }
 
@@ -95,10 +161,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       data..sort((a, b) => b.startDate.compareTo(a.startDate));
       _isLoading = false;
     });
+
+    _generateGreeting(); // ✅ ADD HERE
   }
+
   Future<void> _refreshData() async {
     await _loadSettings();
     await _loadPeriods();
+    _generateGreeting();
 
     // optional smoothness
     await Future.delayed(const Duration(milliseconds: 300));
@@ -191,7 +261,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onReturn: _handleReturnFromSettings,
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
+
+              Text(
+                "Hi, $_userName 👋",
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+
+                const SizedBox(height: 12),
+
+                Text(
+                  _currentGreeting,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
 
                 CycleHeroCard(
                   state: heroState,

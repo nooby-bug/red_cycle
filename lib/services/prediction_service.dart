@@ -29,6 +29,29 @@ import 'package:red/models/prediction_data.dart';
 
 class PredictionService {
 
+  String getCurrentPhase({
+    required List<PeriodEntry> periodEntries,
+    required int cycleLength,
+    required DateTime today,
+  }) {
+    if (periodEntries.length < 2) return "unknown";
+
+    // sort ascending
+    final sorted = List<PeriodEntry>.from(periodEntries)
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+    final lastStart = sorted.last.startDate;
+
+    final day = today.difference(lastStart).inDays;
+
+    if (day < 0) return "unknown";
+
+    if (day <= 4) return "period";
+    if (day <= 12) return "follicular";
+    if (day <= 16) return "ovulation";
+    return "luteal";
+  }
+
   PredictionData getPredictionData({
     required List<PeriodEntry> periodEntries,
     required int cycleLength,

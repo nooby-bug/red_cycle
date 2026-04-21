@@ -70,7 +70,7 @@ class CycleHeroCard extends StatelessWidget {
                 onPressed: onLogPeriod,
                 style: ElevatedButton.styleFrom(
                   // Slightly different color when ending a period for visual feedback
-                  backgroundColor: isPeriodActive ? const Color(0xFFD81B60) : const Color(0xFFF48FB1),
+                  backgroundColor: isPeriodActive ? const Color(0xFFF8BBD0) : const Color(0xFFF06292),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),

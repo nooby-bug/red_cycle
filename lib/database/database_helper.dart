@@ -72,8 +72,15 @@ class DatabaseHelper {
   }
 
   Future<int> insertPeriod(DateTime date) async {
-    // fallback: treat as 1-day period
-    return await insertFullPeriod(date, date);
+    final db = await database;
+
+    return await db.insert(
+      'period_entries',
+      {
+        'start_date': date.toIso8601String(),
+        'end_date': null, // 🔥 IMPORTANT
+      },
+    );
   }
 
   Future<void> deleteAllPeriods() async {
