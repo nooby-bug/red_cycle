@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:red/screens/settings/profile_details_screen.dart';
 import 'package:red/screens/settings/cycle_settings_screen.dart';
 import 'package:red/screens/reminders_screen.dart';
+import 'package:red/screens/settings/data_management_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -110,7 +111,14 @@ class SettingsScreen extends StatelessWidget {
                     SettingsTile(
                       icon: Icons.pie_chart_outline,
                       title: 'Data',
-                      onTap: () => debugPrint('Data clicked'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => DataManagementScreen(),
+                          ),
+                        );
+                      },
                     ),
 
                     // Pushes the footer to the bottom of the screen
@@ -174,7 +182,7 @@ class SettingsTile extends StatelessWidget {
         // Soft pastel shadow for a floating, gentle look
         boxShadow:[
           BoxShadow(
-            color: const Color(0xFFFFB6C1).withOpacity(0.15),
+            color: const Color(0xFFFFB6C1).withValues(alpha: 0.15),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),

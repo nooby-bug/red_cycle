@@ -13,6 +13,11 @@ class UserPreferences {
     return prefs.getInt('cycle_reminder_hour');
   }
 
+  static Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+  }
+
   static Future<int?> getCycleReminderMinute() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt('cycle_reminder_minute');

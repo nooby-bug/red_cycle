@@ -76,6 +76,11 @@ class DatabaseHelper {
     return await insertFullPeriod(date, date);
   }
 
+  Future<void> deleteAllPeriods() async {
+    final db = await database;
+    await db.delete('period_entries'); // ✅ correct table
+  }
+
   Future<void> endPeriod(int id, DateTime endDate) async {
     final db = await database;
 
