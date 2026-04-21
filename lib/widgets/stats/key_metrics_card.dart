@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 
 class KeyMetricsCard extends StatelessWidget {
-  const KeyMetricsCard({super.key});
+  final double avgCycleLength;
+  final double avgPeriodLength;
+  final int lastCycleLength;
 
-  /// A reusable helper widget for displaying a single metric row.
+  const KeyMetricsCard({
+    super.key,
+    required this.avgCycleLength,
+    required this.avgPeriodLength,
+    required this.lastCycleLength,
+  });
+
   Widget _buildMetricRow({required String label, required String value}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -50,29 +58,33 @@ class KeyMetricsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- Title ---
           const Text(
             'Your Cycle Overview',
             style: TextStyle(
               fontSize: 17,
-              fontWeight: FontWeight.w600, // Semi-bold
+              fontWeight: FontWeight.w600,
               color: Color(0xFF333333),
             ),
           ),
           const SizedBox(height: 16),
 
-          // --- Content Rows ---
           _buildMetricRow(
             label: 'Average Cycle Length',
-            value: '29 days',
+            value: avgCycleLength > 0
+                ? '${avgCycleLength.round()} days'
+                : '--',
           ),
           _buildMetricRow(
             label: 'Average Period Length',
-            value: '5 days',
+            value: avgPeriodLength > 0
+                ? '${avgPeriodLength.round()} days'
+                : '--',
           ),
           _buildMetricRow(
             label: 'Last Cycle Length',
-            value: '30 days',
+            value: lastCycleLength > 0
+                ? '$lastCycleLength days'
+                : '--',
           ),
         ],
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:red/database/database_helper.dart'; // Adjust path if needed
 import 'package:red/models/period_entry.dart';    // Adjust path if needed
+import 'package:red/widgets/stats/key_metrics_card.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -56,11 +57,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
         totalPeriodDays += length;
         validPeriodCount++;
-
-        // 👇 ADD THIS
-        if (length >= 2 && length <= 10) {
-          periodLengths.add(length);
-        }
+        periodLengths.add(length);
       }
     }
     final avgPeriod = validPeriodCount > 0 ? totalPeriodDays / validPeriodCount : 0.0;
@@ -141,7 +138,7 @@ class _StatsScreenState extends State<StatsScreen> {
               ),
               const SizedBox(height: 24),
 
-              _KeyMetricsCard(
+              KeyMetricsCard(
                 avgCycleLength: _avgCycleLength,
                 avgPeriodLength: _avgPeriodLength,
                 lastCycleLength: _lastCycleLength,
@@ -174,100 +171,6 @@ class _StatsScreenState extends State<StatsScreen> {
 // ===============================================
 // UI WIDGETS
 // ===============================================
-
-class _KeyMetricsCard extends StatelessWidget {
-  final double avgCycleLength;
-  final double avgPeriodLength;
-  final int lastCycleLength;
-
-  const _KeyMetricsCard({
-    required this.avgCycleLength,
-    required this.avgPeriodLength,
-    required this.lastCycleLength,
-  });
-
-  Widget _buildMetricRow({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10.0),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFFF06292), size: 20),
-          const SizedBox(width: 12),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              // Replaced withOpacity with withValues(alpha:)
-              color: const Color(0xFF333333).withValues(alpha: 0.5),
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFFD36275),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF5F7),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.pink.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
-          ),
-        ],
-        border: Border.all(color: Colors.pink.withValues(alpha: 0.06)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Your Cycle Overview',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF6D4C51),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildMetricRow(
-            icon: Icons.refresh_rounded,
-            label: 'Average Cycle Length',
-            value: avgCycleLength > 0 ? '${avgCycleLength.round()} days' : '--',
-          ),
-          _buildMetricRow(
-            icon: Icons.water_drop_outlined,
-            label: 'Average Period Length',
-            value: avgPeriodLength > 0 ? '${avgPeriodLength.round()} days' : '--',
-          ),
-          _buildMetricRow(
-            icon: Icons.schedule_rounded,
-            label: 'Last Cycle Length',
-            value: lastCycleLength > 0 ? '$lastCycleLength days' : '--',
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _CycleVariationCard extends StatelessWidget {
   final int shortestCycle;
@@ -382,8 +285,19 @@ class _CycleTrendCard extends StatelessWidget {
     }
     final minValue = cycleLengths.reduce((a, b) => a < b ? a : b);
     final maxValue = cycleLengths.reduce((a, b) => a > b ? a : b);
-    final minY = ((minValue - 2) ~/ 5) * 5.0;
-    final maxY = (((maxValue + 2) ~/ 5) * 5 + 5).toDouble();
+
+// smart step size
+    double step;
+    if (maxValue <= 30) {
+      step = 2;
+    } else if (maxValue <= 50) {
+      step = 5;
+    } else {
+      step = 10;
+    }
+
+    final minY = (minValue / step).floor() * step;
+    final maxY = (maxValue / step).ceil() * step;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
@@ -491,7 +405,7 @@ class _CycleTrendCard extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 40,
-                        interval: 5,
+                        interval: step,
                       getTitlesWidget: (value, meta) {
                         return Text(
                           value.toInt().toString(),
@@ -580,8 +494,23 @@ class _PeriodTrendCard extends StatelessWidget {
         ),
       );
     }
-    final minY = periodLengths.reduce((a, b) => a < b ? a : b).toDouble();
-    final maxY = periodLengths.reduce((a, b) => a > b ? a : b).toDouble();
+    final minValue = periodLengths.reduce((a, b) => a < b ? a : b);
+    final maxValue = periodLengths.reduce((a, b) => a > b ? a : b);
+
+// smart step size
+    double step;
+    if (maxValue <= 10) {
+      step = 1;
+    } else if (maxValue <= 20) {
+      step = 2;
+    } else if (maxValue <= 40) {
+      step = 5;
+    } else {
+      step = 10;
+    }
+
+    final minY = (minValue / step).floor() * step;
+    final maxY = (maxValue / step).ceil() * step;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
@@ -624,7 +553,7 @@ class _PeriodTrendCard extends StatelessWidget {
               LineChartData(
                 clipData: FlClipData.none(),
                 minY: minY - 1,
-                maxY: maxY + 1,
+                maxY: maxY + step,
 
                 gridData: FlGridData(
                   show: true,
@@ -666,7 +595,7 @@ class _PeriodTrendCard extends StatelessWidget {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      interval: 1,
+                      interval: step,
                       reservedSize: 40,
                       getTitlesWidget: (value, meta) {
                         return Text(
