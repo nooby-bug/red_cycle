@@ -96,6 +96,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _isLoading = false;
     });
   }
+  Future<void> _refreshData() async {
+    await _loadSettings();
+    await _loadPeriods();
+
+    // optional smoothness
+    await Future.delayed(const Duration(milliseconds: 300));
+  }
 
   Future<void> _handleLogPeriod() async {
     final activeEntry = _periodEntries.firstWhere(
@@ -166,8 +173,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
+        child: RefreshIndicator(
+          onRefresh: _refreshData,
+          color: const Color(0xFFF48FB1),
+
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(), // 🔥 IMPORTANT
+            child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -201,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
                 const SizedBox(height: 40),
               ],
+            ),
             ),
           ),
         ),
