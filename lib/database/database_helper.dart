@@ -35,19 +35,42 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // 🔥 bump version
       onCreate: _createDB,
+      onUpgrade: _onUpgrade, // 🔥 ADD THIS
     );
   }
 
   Future<void> _createDB(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE period_entries (
+    CREATE TABLE period_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      start_date TEXT NOT NULL,
+      end_date TEXT
+    )
+  ''');
+
+    await db.execute('''
+    CREATE TABLE daily_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT UNIQUE,
+      mood INTEGER,
+      pain INTEGER
+    )
+  ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+      CREATE TABLE daily_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        start_date TEXT NOT NULL,
-        end_date TEXT
+        date TEXT UNIQUE,
+        mood INTEGER,
+        pain INTEGER
       )
     ''');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -136,6 +159,45 @@ class DatabaseHelper {
     } catch (e) {
       throw Exception('Failed to clear database: $e');
     }
+  }
+
+  Future<void> insertOrUpdateLog(Map<String, dynamic> log) async {
+    final db = await database;
+
+    await db.insert(
+      'daily_logs',
+      log,
+      conflictAlgorithm: ConflictAlgorithm.replace, // 🔥 key
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllLogs() async {
+    final db = await database;
+
+    return await db.query(
+      'daily_logs',
+      orderBy: 'date ASC',
+    );
+  }
+
+  Future<Map<String, dynamic>?> getLogByDate(DateTime date) async {
+    final db = await database;
+
+    final result = await db.query(
+      'daily_logs',
+      where: 'date = ?',
+      whereArgs: [date.toIso8601String()],
+    );
+
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+
+    return null;
+  }
+  Future<void> deleteAllLogs() async {
+    final db = await database;
+    await db.delete('daily_logs');
   }
 
   /// Closes the database connection.

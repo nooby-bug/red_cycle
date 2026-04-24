@@ -8,6 +8,7 @@ import '../widgets/home/date_strip.dart';
 import '../widgets/home/prediction_summary.dart';
 import '../widgets/home/top_bar.dart';
 import '../utils/user_preferences.dart';
+import '../widgets/home/mood_pain_card.dart';
 import 'dart:math';
 
 class HomeScreen extends StatefulWidget {
@@ -344,6 +345,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ovulationDate: ovulationStr,
                     fertileWindow: fertileStr,
                   ),
+
+                  const SizedBox(height: 24),
+
+                  const MoodPainCard(),
 
                   const SizedBox(height: 40),
                 ],
