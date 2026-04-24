@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:red/services/notification_service.dart';
 import 'screens/home_screen.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:red/services/affirmation_notification_service.dart';
+import'package:red/services/affirmation_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 🔥 REQUIRED for scheduled notifications
+  tz.initializeTimeZones();
+
   try {
     await NotificationService.instance.init();
+    await AffirmationNotificationService.instance.init();
+    await AffirmationService.instance.init();
   } catch (e) {
     debugPrint("Notification init failed: $e");
   }

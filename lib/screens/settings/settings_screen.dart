@@ -3,6 +3,7 @@ import 'package:red/screens/settings/profile_details_screen.dart';
 import 'package:red/screens/settings/cycle_settings_screen.dart';
 import 'package:red/screens/reminders_screen.dart';
 import 'package:red/screens/settings/data_management_screen.dart';
+import 'package:red/screens/settings/affirmation_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -107,7 +108,21 @@ class SettingsScreen extends StatelessWidget {
                         }
                     ),
 
-                    // 4. Data Section
+                    // 4. Affirmations Section
+                    SettingsTile(
+                      icon: Icons.favorite_border_rounded,
+                      title: 'Affirmations',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AffirmationsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // 5. Data Section
                     SettingsTile(
                       icon: Icons.pie_chart_outline,
                       title: 'Data',

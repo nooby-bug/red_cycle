@@ -22,6 +22,8 @@
     static const int _periodStartId = 2002;
     static const int _ovulationId = 3001;
     static const int _fertileWindowId = 3002;
+    static const int _baseAffirmationId = 5000;
+    static const int _maxAffirmationFrequency = 10;
 
     static const String _channelId = 'daily_reminder_channel';
     static const String _channelName = 'Daily Reminders';
