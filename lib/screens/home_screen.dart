@@ -34,23 +34,62 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _loadSettings();
     _loadPeriods();
     _loadUserName();
-    _generateGreeting();
   }
 
   void _generateGreeting() {
     final random = Random();
-
     final hour = DateTime.now().hour;
 
     String timeGreeting;
-    if (hour < 12) {
-      timeGreeting = "Good morning 🌅";
-    } else if (hour < 18) {
-      timeGreeting = "Good afternoon ☀️";
+
+    // 🔥 YOUR CUSTOM GREETINGS
+    final morningGreetings = [
+      "Good morning Sunshine! 🌅",
+      "Hey! You look particularly cute today! 💕",
+      "Sun-kissed beauty! ☀️",
+      "Go slay queen! 👑",
+      "Good luck for today's bullshit 😌",
+      "Slept good pookie? 💤",
+      "New day! New shit! 💫",
+      "Damnnn... You prettyyyy! 😳",
+    ];
+
+    final afternoonGreetings = [
+      "Had lunch? 🍽️",
+      "Good afternoon ☀️",
+      "A quick nap can be good now 😴",
+      "Drink some water! 💧",
+      "A flower for you 🌸",
+    ];
+
+    final eveningGreetings = [
+      "Good evening 🌙",
+      "Doesn't the setting sun look beautiful? 🌇",
+      "Drink waterrrr!!! 💧",
+    ];
+
+    final nightGreetings = [
+      "Sleep now 😴",
+      "You cooked today 🔥",
+    ];
+
+    // ✅ TIME LOGIC
+    if (hour >= 5 && hour < 12) {
+      timeGreeting =
+      morningGreetings[random.nextInt(morningGreetings.length)];
+    } else if (hour >= 12 && hour < 17) {
+      timeGreeting =
+      afternoonGreetings[random.nextInt(afternoonGreetings.length)];
+    } else if (hour >= 17 && hour < 21) {
+      timeGreeting =
+      eveningGreetings[random.nextInt(eveningGreetings.length)];
     } else {
-      timeGreeting = "Good evening 🌙";
+      // 9 PM → 4:59 AM
+      timeGreeting =
+      nightGreetings[random.nextInt(nightGreetings.length)];
     }
 
+    // 🔥 PHASE MESSAGE
     final phase = _predictionService.getCurrentPhase(
       periodEntries: _periodEntries,
       cycleLength: _cycleLength,
@@ -62,28 +101,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         "Take it slow today 💗",
         "Rest is productive too 🌿",
         "Your body is doing important work 🌸",
+        "Be extra gentle with yourself 🤍",
       ],
       "follicular": [
         "Fresh start energy ✨",
         "Try something new today 🌱",
         "Great day to begin something 💫",
+        "You’re building momentum 🚀",
       ],
       "ovulation": [
         "You're glowing today 🌸",
         "Speak your mind confidently 💫",
         "Your energy is at its peak 🔥",
+        "Connect and express freely 💕",
       ],
       "luteal": [
         "Be kind to yourself 🤍",
         "Slow down and reflect 🌙",
         "Take things gently today 🌼",
+        "Protect your energy today 🕊️",
       ],
     };
 
     final list = messages[phase] ?? ["Take care today 💛"];
     final message = list[random.nextInt(list.length)];
 
-    _currentGreeting = "$timeGreeting\n$message";
+    // 🔥 FINAL OUTPUT (no duplicate name)
+    setState(() {
+      _currentGreeting = "$timeGreeting\n$message";
+    });
   }
 
   @override
@@ -108,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _today = DateTime.now();
       });
 
-      _loadPeriods(); // ✅ FIX: refresh when app resumes
+      _loadPeriods();
     }
   }
 
@@ -136,7 +182,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _userName = name;
     });
-    _generateGreeting(); // ✅ ADD THIS
+
+    _generateGreeting(); // ✅ trigger after name load
   }
 
   Future<void> _loadSettings() async {
@@ -162,15 +209,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _isLoading = false;
     });
 
-    _generateGreeting(); // ✅ ADD HERE
+    _generateGreeting(); // ✅ trigger after data load
   }
 
   Future<void> _refreshData() async {
     await _loadSettings();
     await _loadPeriods();
-    _generateGreeting();
 
-    // optional smoothness
     await Future.delayed(const Duration(milliseconds: 300));
   }
 
@@ -213,7 +258,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final bool isPeriodActive =
     _periodEntries.any((entry) => entry.endDate == null);
 
-// ✅ USE class-level instance
     final prediction = _predictionService.getPredictionData(
       periodEntries: _periodEntries,
       cycleLength: _cycleLength,
@@ -246,65 +290,64 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: RefreshIndicator(
           onRefresh: _refreshData,
           color: const Color(0xFFF48FB1),
-
           child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(), // 🔥 IMPORTANT
+            physics: const AlwaysScrollableScrollPhysics(),
             child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 16),
 
-                TopBar(
-                  today: _today,
-                  onReturn: _handleReturnFromSettings,
-                ),
-
-                const SizedBox(height: 20),
-
-              Text(
-                "Hi, $_userName 👋",
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-
-                const SizedBox(height: 12),
-
-                Text(
-                  _currentGreeting,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
+                  TopBar(
+                    today: _today,
+                    onReturn: _handleReturnFromSettings,
                   ),
-                ),
 
-                const SizedBox(height: 20),
+                  const SizedBox(height: 20),
 
-                CycleHeroCard(
-                  state: heroState,
-                  isPeriodActive: isPeriodActive,
-                  onLogPeriod: _handleLogPeriod,
-                ),
+                  Text(
+                    "Hi, $_userName 👋",
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
 
-                const SizedBox(height: 32),
+                  const SizedBox(height: 12),
 
-                const DateStrip(),
+                  Text(
+                    _currentGreeting,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
 
-                const SizedBox(height: 32),
+                  const SizedBox(height: 20),
 
-                PredictionSummary(
-                  nextPeriodDate: nextPeriodStr,
-                  ovulationDate: ovulationStr,
-                  fertileWindow: fertileStr,
-                ),
+                  CycleHeroCard(
+                    state: heroState,
+                    isPeriodActive: isPeriodActive,
+                    onLogPeriod: _handleLogPeriod,
+                  ),
 
-                const SizedBox(height: 40),
-              ],
-            ),
+                  const SizedBox(height: 32),
+
+                  const DateStrip(),
+
+                  const SizedBox(height: 32),
+
+                  PredictionSummary(
+                    nextPeriodDate: nextPeriodStr,
+                    ovulationDate: ovulationStr,
+                    fertileWindow: fertileStr,
+                  ),
+
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
           ),
         ),
